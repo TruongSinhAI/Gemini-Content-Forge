@@ -10,7 +10,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}from 'genkit';
 import {MessageData} from 'genkit/generate';
 
 
@@ -27,50 +27,9 @@ const GenerateArticleInputSchema = z.object({
 export type GenerateArticleInput = z.infer<typeof GenerateArticleInputSchema>;
 
 // Output schema is not strictly needed for streaming text, but good for potential structured output in future non-streaming versions.
-const GenerateArticleOutputSchema = z.object({
-  articleChunk: z.string().describe('A chunk of the generated article content.'),
-});
-
-
-const generateArticlePrompt = ai.definePrompt({
-  name: 'generateArticlePrompt',
-  input: {schema: GenerateArticleInputSchema},
-  // For streaming, output schema is more about the chunks, not the final object.
-  // The flow itself will produce a ReadableStream<string>.
-  prompt: `You are an AI assistant specializing in content generation. Your primary goal is to create a well-structured and coherent "{{contentType}}" based on the provided information.
-
-Output Format: {{{outputFormat}}}. Ensure your entire output strictly adheres to this format. For example, if 'markdown' is requested, use Markdown syntax (headings, lists, bold, italics, code blocks, tables etc. where appropriate). If 'html' is requested, use valid, semantic HTML structure (e.g. <article>, <p>, <h1>, <ul>, <li>). If 'text' is requested, provide plain text.
-
-Target Language: {{#if language}}{{{language}}}{{else}}English{{/if}}. Make sure the entire output is in this language.
-
-{{#if uploadedContent}}
-IMPORTANT: The following user-uploaded document is the MOST CRITICAL source. Prioritize its content above all else. Your generated article should primarily be derived from, expand upon, or summarize this document, tailored to the requested content type, keywords, and output format.
---- USER UPLOADED DOCUMENT START ---
-{{{uploadedContent}}}
---- USER UPLOADED DOCUMENT END ---
-{{/if}}
-
-{{#if additionalContext}}
-Consider the following additional context, which might include search results or specific notes. Integrate relevant parts of this context if it complements the user-uploaded document (if provided) and the overall goal.
---- ADDITIONAL CONTEXT START ---
-{{{additionalContext}}}
---- ADDITIONAL CONTEXT END ---
-{{/if}}
-
-Keywords/Topics to focus on: {{{keywords}}}
-
-Content Type to generate: {{{contentType}}}
-
-Instructions:
-1.  If a user-uploaded document is provided, use it as the main foundation for the article.
-2.  If additional context is provided, incorporate it intelligently to enhance the article, ensuring it aligns with the uploaded document's theme if one exists.
-3.  If no uploaded document is provided, generate the article based on the keywords, additional context (if any), content type, and output format.
-4.  Ensure the final article is logical, easy to understand, and directly addresses the specified keywords, content type, and output format.
-5.  Generate the entire article STRICTLY in the "Target Language" specified above and in the "Output Format" specified. Do not mix languages or formats.
-6.  For 'markdown' or 'html' formats, ensure the output is well-formed and complete. For example, for HTML, include necessary tags. For Markdown, use appropriate syntax for structure and emphasis.
-
-Generated Article (in {{#if language}}{{{language}}}{{else}}English{{/if}}, format: {{{outputFormat}}}):`,
-});
+// const GenerateArticleOutputSchema = z.object({
+//   articleChunk: z.string().describe('A chunk of the generated article content.'),
+// });
 
 
 export const generateArticleStreamFlow = ai.defineFlow(
@@ -82,7 +41,6 @@ export const generateArticleStreamFlow = ai.defineFlow(
   },
   async (input, $stream) => {
     // Construct the prompt messages array
-    const promptMessages: MessageData[] = [];
     let fullPromptText = `You are an AI assistant specializing in content generation. Your primary goal is to create a well-structured and coherent "${input.contentType}" based on the provided information.
 
 Output Format: ${input.outputFormat}. Ensure your entire output strictly adheres to this format. For example, if 'markdown' is requested, use Markdown syntax (headings, lists, bold, italics, code blocks, tables etc. where appropriate). If 'html' is requested, use valid, semantic HTML structure (e.g. <article>, <p>, <h1>, <ul>, <li>). If 'text' is requested, provide plain text.
@@ -101,26 +59,18 @@ Target Language: ${input.language || 'English'}. Make sure the entire output is 
     fullPromptText += `\n\nInstructions:\n1. If a user-uploaded document is provided, use it as the main foundation for the article.\n2. If additional context is provided, incorporate it intelligently to enhance the article, ensuring it aligns with the uploaded document's theme if one exists.\n3. If no uploaded document is provided, generate the article based on the keywords, additional context (if any), content type, and output format.\n4. Ensure the final article is logical, easy to understand, and directly addresses the specified keywords, content type, and output format.\n5. Generate the entire article STRICTLY in the "Target Language" specified above and in the "Output Format" specified. Do not mix languages or formats.\n6. For 'markdown' or 'html' formats, ensure the output is well-formed and complete. For example, for HTML, include necessary tags. For Markdown, use appropriate syntax for structure and emphasis.`;
     fullPromptText += `\n\nGenerated Article (in ${input.language || 'English'}, format: ${input.outputFormat}):`;
     
-    if (fullPromptText && fullPromptText.trim()) {
-      promptMessages.push({ role: 'user', content: [{ text: fullPromptText }] });
-    } else {
-      console.error("Prompt text is empty or undefined. Cannot generate article.");
-      $stream.write("Error: Prompt text is empty.");
-      // Consider closing or aborting the stream if appropriate for Genkit's $stream
-      // For now, returning will prevent ai.generateStream from being called with empty/invalid prompt.
-      return; 
+    if (typeof fullPromptText !== 'string' || !fullPromptText.trim()) {
+      const errorDetail = `Prompt text is invalid or empty. Type: ${typeof fullPromptText}, Value: '${String(fullPromptText).substring(0,100)}...'`;
+      console.error(errorDetail + ". Cannot generate article.");
+      // This error will be caught by the ReadableStream wrapper in the exported function
+      throw new Error(errorDetail); 
     }
 
-
+    // Pass the fullPromptText string directly to ai.generateStream
     const {stream, response} = ai.generateStream({
-      prompt: promptMessages, // Use the constructed messages array
-      // The 'input' parameter is generally for ai.definePrompt-based templating,
-      // not when providing a fully constructed MessageData[] array.
-      // Removing 'input: input' to avoid potential conflicts or misinterpretations.
+      prompt: fullPromptText, 
       model: 'googleai/gemini-2.0-flash', 
-      // output: { schema: GenerateArticleOutputSchema }, // Not needed for direct streaming of text chunks
       config: {
-        // You might want to adjust safety settings if you encounter issues with content generation being blocked.
         // safetySettings: [
         //   { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
         // ],
@@ -132,47 +82,56 @@ Target Language: ${input.language || 'English'}. Make sure the entire output is 
         $stream.write(chunk.text);
       }
     }
-    await response; // Wait for the full response metadata if needed
+    await response; 
   }
 );
 
 
 export async function generateArticleStream(input: GenerateArticleInput): Promise<ReadableStream<Uint8Array>> {
   try {
-    const resultStream = await generateArticleStreamFlow(input);
+    // Call the Genkit flow. It returns a Genkit-specific stream object.
+    const genkitStream = await generateArticleStreamFlow(input);
     const encoder = new TextEncoder();
     
+    // Adapt Genkit's stream to a standard ReadableStream<Uint8Array>
     const readableStream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          for await (const chunk of resultStream) {
+          // Iterate over chunks from the Genkit stream
+          for await (const chunk of genkitStream) {
             if (typeof chunk === 'string') {
               controller.enqueue(encoder.encode(chunk));
+            } else if (chunk && typeof chunk === 'object' && 'text' in chunk && typeof chunk.text === 'string') {
+              // Handle cases where chunk might be an object with a text property (though flow outputSchema is z.string())
+              controller.enqueue(encoder.encode(chunk.text));
             }
           }
+          // Check if controller is still active before closing
+          if (controller.desiredSize !== null && controller.desiredSize > 0) {
+             controller.close();
+          }
         } catch (error) {
-          console.error('Error reading from Genkit stream or encoding:', error);
+          console.error('Error reading from Genkit stream or encoding in ReadableStream:', error);
           let errorMessage = "An unexpected error occurred during content generation streaming.";
           if (error instanceof Error) {
             errorMessage = error.message;
           }
-          // It's important to check if the controller is still active before enqueuing/erroring
-          if (controller.desiredSize !== null && controller.desiredSize > 0) { // A way to check if controller is active
+          // Check if controller is still active
+          if (controller.desiredSize !== null && controller.desiredSize > 0) {
             try {
               controller.enqueue(encoder.encode(`\n\n--- STREAMING ERROR ---\n${errorMessage}`));
               controller.error(new Error(errorMessage)); 
             } catch (e) {
-              // Controller might have been closed or errored by another part already
               console.warn("Controller was already closed or errored when trying to signal stream error:", e);
             }
           }
         } finally {
-          // Ensure close is only called if controller is active
-          if (controller.desiredSize !== null && controller.desiredSize > 0) {
+          // Ensure close is only called if controller is active and not already closed/errored
+           if (controller.desiredSize !== null && controller.desiredSize > 0) {
             try {
-              controller.close();
+                // controller.close(); // controller.error() already closes it. Explicit close here can cause errors if already errored.
             } catch (e) {
-              console.warn("Controller was already closed when trying to close in finally block:", e);
+                // console.warn("Controller was already closed when trying to close in finally block:", e);
             }
           }
         }
@@ -182,7 +141,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
     return readableStream;
 
   } catch (error) {
-    console.error("Error initiating article generation stream:", error);
+    console.error("Error initiating article generation stream (outer try-catch):", error);
     const encoder = new TextEncoder();
     let errorMessage = "Failed to start article generation stream.";
     if (error instanceof Error) {
@@ -193,7 +152,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
       start(controller) {
         controller.enqueue(encoder.encode(`--- ERROR INITIALIZING STREAM ---\n${errorMessage}`));
         controller.error(new Error(errorMessage));
-        // Do not call controller.close() here as controller.error() already closes it.
+        // controller.close() is not needed here as controller.error() closes it.
       }
     });
   }
@@ -228,4 +187,3 @@ Generated Article (in ${input.language || 'English'}, format: ${input.outputForm
   });
   return { article: text || '' };
 }
-

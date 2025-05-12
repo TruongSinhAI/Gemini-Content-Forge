@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type ChangeEvent, useEffect } from 'react';
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X } from "lucide-react";
-import { generateArticleStream, type GenerateArticleInput } from '@/ai/flows/generate-article';
+import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
 import { useToast } from "@/hooks/use-toast";
@@ -282,32 +283,18 @@ export default function GeminiContentForgePage() {
         outputFormat: selectedOutputFormat,
       };
 
-      const responseStream = await generateArticleStream(input);
-      const reader = responseStream.getReader();
-      const decoder = new TextDecoder();
-      let articleContent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        articleContent += chunk;
-        setGeneratedArticle(prev => prev + chunk);
-      }
+      const result: GenerateArticleOutput = await generateArticle(input);
       
-      // Check for error messages embedded in the stream by the flow
-      if (articleContent.includes("--- STREAMING ERROR ---") || articleContent.includes("--- ERROR INITIALIZING STREAM ---")) {
-          const errorMsg = articleContent.substring(articleContent.indexOf("---") + articleContent.substring(articleContent.indexOf("---")).indexOf("\n") + 1).trim();
-          toast({ title: "Generation Error", description: `An error occurred: ${errorMsg || 'Unknown stream error'}`, variant: "destructive" });
-          setGeneratedArticle(articleContent); // Show the error in the textarea
-      } else if (articleContent.trim()) {
+      if (result && result.article && result.article.trim()) {
+        setGeneratedArticle(result.article);
         toast({ title: "Article Generated!", description: "Your content is ready." });
       } else {
         toast({ title: "Empty Response", description: "The AI returned an empty response. Try adjusting your inputs.", variant: "destructive" });
+        setGeneratedArticle(''); // Ensure it's cleared
       }
 
     } catch (error: any) {
-      console.error("Error generating article stream:", error);
+      console.error("Error generating article:", error);
       const errorMessage = error.message || "Failed to generate article. Please try again.";
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
       setGeneratedArticle(`--- ERROR ---\n${errorMessage}`); // Display error in output area
@@ -618,7 +605,7 @@ export default function GeminiContentForgePage() {
                     <p className="text-sm text-muted-foreground">This might take a few moments as the AI writes.</p>
                  </div>
               )}
-              {generatedArticle && !isLoadingArticle && (
+              {generatedArticle && ( // Show generated article regardless of isLoadingArticle for responsiveness with stream
                 <div className="generated-content-output-area min-h-[200px]">
                   {selectedOutputFormat === 'text' && (
                     <Textarea 
@@ -628,6 +615,7 @@ export default function GeminiContentForgePage() {
                       className="text-base leading-relaxed border-input focus:border-primary bg-background p-4 rounded-md shadow-inner w-full h-auto min-h-[400px]"
                       placeholder="Your generated article will appear here."
                       aria-label="Generated article content"
+                      readOnly={isLoadingArticle} // Make read-only while loading new content
                     />
                   )}
                   {selectedOutputFormat === 'markdown' && (
@@ -655,3 +643,4 @@ export default function GeminiContentForgePage() {
     </div>
   );
 }
+

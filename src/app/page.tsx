@@ -1,15 +1,14 @@
-
 "use client";
 
-import { useState, type ChangeEvent, useEffect, type CSSProperties } from 'react';
+import { useState, type ChangeEvent, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon } from "lucide-react";
-import { generateArticle, type GenerateArticleInput } from '@/ai/flows/generate-article';
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X } from "lucide-react";
+import { generateArticleStream, type GenerateArticleInput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import * as pdfjsLib from 'pdfjs-dist';
 import * as XLSX from 'xlsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 
 interface LanguageOption {
@@ -33,6 +34,17 @@ const supportedLanguages: LanguageOption[] = [
   { value: 'Japanese', label: '日本語' },
   { value: 'Korean', label: '한국어' },
   { value: 'Chinese (Simplified)', label: '简体中文' },
+];
+
+interface OutputFormatOption {
+  value: 'text' | 'markdown' | 'html';
+  label: string;
+}
+
+const outputFormatOptions: OutputFormatOption[] = [
+  { value: 'text', label: 'Plain Text' },
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'html', label: 'HTML' },
 ];
 
 interface SearchResultItem extends ApiSearchResultItem {
@@ -53,6 +65,7 @@ export default function GeminiContentForgePage() {
   const [description, setDescription] = useState(''); 
   const [customContentType, setCustomContentType] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value);
+  const [selectedOutputFormat, setSelectedOutputFormat] = useState<OutputFormatOption['value']>(outputFormatOptions[0].value);
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -244,23 +257,21 @@ export default function GeminiContentForgePage() {
 
   const handleGenerateArticle = async () => {
     if (!keywords.trim() || !customContentType.trim()) {
-      toast({
-        title: "Input Required",
-        description: "Please provide keywords and a custom content type.",
-        variant: "destructive",
-      });
+      toast({ title: "Input Required", description: "Please provide keywords and a custom content type.", variant: "destructive" });
       return;
     }
     if (!selectedLanguage) {
-      toast({
-        title: "Input Required",
-        description: "Please select an output language.",
-        variant: "destructive",
-      });
+      toast({ title: "Input Required", description: "Please select an output language.", variant: "destructive" });
       return;
     }
+    if (!selectedOutputFormat) {
+      toast({ title: "Input Required", description: "Please select an output format.", variant: "destructive" });
+      return;
+    }
+
     setIsLoadingArticle(true);
     setGeneratedArticle('');
+
     try {
       const input: GenerateArticleInput = {
         keywords: keywords,
@@ -268,13 +279,38 @@ export default function GeminiContentForgePage() {
         language: selectedLanguage,
         uploadedContent: uploadedFileContent || undefined,
         additionalContext: description || undefined,
+        outputFormat: selectedOutputFormat,
       };
-      const result = await generateArticle(input);
-      setGeneratedArticle(result.article);
-      toast({ title: "Article Generated!", description: "Your content is ready." });
-    } catch (error) {
-      console.error("Error generating article:", error);
-      toast({ title: "Error", description: "Failed to generate article. Please try again.", variant: "destructive" });
+
+      const responseStream = await generateArticleStream(input);
+      const reader = responseStream.getReader();
+      const decoder = new TextDecoder();
+      let articleContent = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        articleContent += chunk;
+        setGeneratedArticle(prev => prev + chunk);
+      }
+      
+      // Check for error messages embedded in the stream by the flow
+      if (articleContent.includes("--- STREAMING ERROR ---") || articleContent.includes("--- ERROR INITIALIZING STREAM ---")) {
+          const errorMsg = articleContent.substring(articleContent.indexOf("---") + articleContent.substring(articleContent.indexOf("---")).indexOf("\n") + 1).trim();
+          toast({ title: "Generation Error", description: `An error occurred: ${errorMsg || 'Unknown stream error'}`, variant: "destructive" });
+          setGeneratedArticle(articleContent); // Show the error in the textarea
+      } else if (articleContent.trim()) {
+        toast({ title: "Article Generated!", description: "Your content is ready." });
+      } else {
+        toast({ title: "Empty Response", description: "The AI returned an empty response. Try adjusting your inputs.", variant: "destructive" });
+      }
+
+    } catch (error: any) {
+      console.error("Error generating article stream:", error);
+      const errorMessage = error.message || "Failed to generate article. Please try again.";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      setGeneratedArticle(`--- ERROR ---\n${errorMessage}`); // Display error in output area
     } finally {
       setIsLoadingArticle(false);
     }
@@ -297,7 +333,7 @@ export default function GeminiContentForgePage() {
               <Lightbulb className="text-accent w-7 h-7" />
               <h2 className="text-2xl font-semibold leading-none tracking-tight">Topic & Keyword Suggester</h2>
             </div>
-            <p className="text-sm text-muted-foreground ml-10"> {/* Align with title text */}
+            <p className="text-sm text-muted-foreground ml-10">
               Get inspiration! Enter an idea to discover related topics and keywords.
             </p>
           </div>
@@ -326,7 +362,7 @@ export default function GeminiContentForgePage() {
                         variant="outline" 
                         size="sm" 
                         onClick={() => handleAddTopicToKeywords(topic)}
-                        className="bg-accent/10 hover:bg-accent/20 text-accent-foreground border-accent/30 rounded-full"
+                        className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full"
                       >
                         {topic}
                       </Button>
@@ -345,7 +381,7 @@ export default function GeminiContentForgePage() {
               <Search className="text-accent w-7 h-7" />
               <h2 className="text-2xl font-semibold leading-none tracking-tight">Real-time Web Search</h2>
             </div>
-            <p className="text-sm text-muted-foreground ml-10"> {/* Align with title text */}
+            <p className="text-sm text-muted-foreground ml-10">
               Find up-to-date information from Google to enrich your content. Fetched content is AI-extracted.
             </p>
           </div>
@@ -422,7 +458,7 @@ export default function GeminiContentForgePage() {
                 <Settings2 className="text-accent w-7 h-7" />
                 <CardTitle className="text-2xl">Content Generation Setup</CardTitle>
             </div>
-            <CardDescription className="ml-10"> {/* Align with title text */}
+            <CardDescription className="ml-10">
               Provide details below to generate your unique content.
             </CardDescription>
           </CardHeader>
@@ -498,18 +534,40 @@ export default function GeminiContentForgePage() {
                 <p className="text-xs text-muted-foreground">A short description, specific points, or search snippets to include.</p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                  Custom Content Type
-                </Label>
-                <Input 
-                  id="custom-content-type" 
-                  placeholder="e.g., blog post, product review, technical summary" 
-                  value={customContentType} 
-                  onChange={(e) => setCustomContentType(e.target.value)} 
-                />
-                <p className="text-xs text-muted-foreground">Specify the type of content you want (e.g., email, poem, script).</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Custom Content Type
+                  </Label>
+                  <Input 
+                    id="custom-content-type" 
+                    placeholder="e.g., blog post, technical summary" 
+                    value={customContentType} 
+                    onChange={(e) => setCustomContentType(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">Specify type (e.g., email, poem).</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="output-format-select" className="flex items-center gap-1.5">
+                    <Palette className="w-4 h-4 text-muted-foreground" />
+                    Output Format
+                  </Label>
+                  <Select onValueChange={(value: OutputFormatOption['value']) => setSelectedOutputFormat(value)} value={selectedOutputFormat}>
+                    <SelectTrigger id="output-format-select" className="w-full">
+                      <SelectValue placeholder="Select format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {outputFormatOptions.map(format => (
+                        <SelectItem key={format.value} value={format.value}>
+                          {format.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Choose Text, Markdown, or HTML.</p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -548,8 +606,8 @@ export default function GeminiContentForgePage() {
                     <FileText className="text-accent w-7 h-7" />
                     <CardTitle className="text-2xl">Generated Article</CardTitle>
                 </div>
-              <CardDescription className="ml-10"> {/* Align with title text */}
-                Review and edit your AI-generated content below. You can copy it or make changes directly.
+              <CardDescription className="ml-10">
+                Review and edit your AI-generated content below.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
@@ -557,18 +615,33 @@ export default function GeminiContentForgePage() {
                  <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-lg p-8 bg-card">
                     <Loader2 className="w-12 h-12 animate-spin text-primary" />
                     <p className="mt-4 text-lg text-muted-foreground">Crafting your content...</p>
-                    <p className="text-sm text-muted-foreground">This might take a few moments.</p>
+                    <p className="text-sm text-muted-foreground">This might take a few moments as the AI writes.</p>
                  </div>
               )}
-              {generatedArticle && (
-                <Textarea 
-                  value={generatedArticle}
-                  onChange={(e) => setGeneratedArticle(e.target.value)}
-                  rows={18}
-                  className="text-base leading-relaxed border-input focus:border-primary bg-background p-4 rounded-md shadow-inner"
-                  placeholder="Your generated article will appear here."
-                  aria-label="Generated article content"
-                />
+              {generatedArticle && !isLoadingArticle && (
+                <div className="generated-content-output-area min-h-[200px]">
+                  {selectedOutputFormat === 'text' && (
+                    <Textarea 
+                      value={generatedArticle}
+                      onChange={(e) => setGeneratedArticle(e.target.value)}
+                      rows={18}
+                      className="text-base leading-relaxed border-input focus:border-primary bg-background p-4 rounded-md shadow-inner w-full h-auto min-h-[400px]"
+                      placeholder="Your generated article will appear here."
+                      aria-label="Generated article content"
+                    />
+                  )}
+                  {selectedOutputFormat === 'markdown' && (
+                    <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{generatedArticle}</ReactMarkdown>
+                    </div>
+                  )}
+                  {selectedOutputFormat === 'html' && (
+                    <div 
+                      className="p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: generatedArticle }} 
+                    />
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -19,7 +19,7 @@ const GenerateArticleInputSchema = z.object({
   uploadedContent: z.string().optional().describe('Text content extracted from a user-uploaded document. This is prioritized as primary reference.'),
   additionalContext: z.string().optional().describe('Any additional textual context, description, or notes provided by the user.'),
   outputFormat: z.enum(['text', 'markdown', 'html']).describe("The desired output format: 'text', 'markdown', or 'html'."),
-  numberOfImages: z.number().int().min(0).max(5).optional().describe('Number of images to generate and embed (0-5). Default is 0 if not provided.'),
+  numberOfImages: z.number().int().min(0).max(5).optional().default(0).describe('Number of images to generate and embed (0-5). Default is 0 if not provided.'),
 });
 export type GenerateArticleInput = z.infer<typeof GenerateArticleInputSchema>;
 
@@ -41,6 +41,7 @@ const GenerateArticleLLMOutputSchema = z.object({
 
 const generateArticlePrompt = ai.definePrompt({
   name: 'generateArticleWithMultipleImagesPrompt',
+  model: 'googleai/gemini-2.5-flash-preview-04-17', // Specify model for content generation
   input: { schema: GenerateArticleInputSchema },
   output: { schema: GenerateArticleLLMOutputSchema },
   prompt: `You are an AI assistant specializing in content generation and structuring. Your primary goal is to create a well-structured and coherent "{{contentType}}" based on the provided information.
@@ -76,10 +77,6 @@ Image Integration Instructions (Generating {{numberOfImages}} image(s)):
 4.  After determining placeholder locations and generating the article text, create an array of {{numberOfImages}} concise and descriptive image generation prompts (max 20 words each). Each prompt in the 'imagePromptSuggestions' array should correspond to its placeholder (e.g., the first prompt for '{{IMAGE_PLACEHOLDER_0}}').
 5.  The final textual article content you provide in the 'articleContent' field must contain these '{{IMAGE_PLACEHOLDER_X}}' strings.
 6.  The 'imagePromptSuggestions' field should contain your array of generated image prompts. If you can't find a suitable place or prompt for some images, provide fewer prompts than {{numberOfImages}}, but ensure placeholders match the number of prompts.
-
-Example for "numberOfImages: 2":
-'articleContent': "Intro text... {{IMAGE_PLACEHOLDER_0}} More text... {{IMAGE_PLACEHOLDER_1}} Conclusion."
-'imagePromptSuggestions': ["A photo of concept A", "An illustration of concept B"]
 {{else}}
 Image Integration Instructions:
 No images are requested. Generate only the textual content. Do not include any image placeholders or image prompt suggestions.
@@ -149,7 +146,7 @@ const generateArticleFlow = ai.defineFlow(
                 break;
               case 'text':
               default:
-                imageEmbedCode = `\n\n[AI-generated image for: "${promptText}". In HTML/Markdown, this image would be displayed here.]\n\n`;
+                imageEmbedCode = `\n\n[AI-Generated Image]\nPrompt: "${promptText}"\n(This image would be displayed visually in HTML or Markdown formats.)\n\n`;
                 break;
             }
             finalArticleContent = finalArticleContent.replace(placeholder, imageEmbedCode);
@@ -193,3 +190,4 @@ const generateArticleFlow = ai.defineFlow(
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleOutput> {
   return generateArticleFlow(input);
 }
+

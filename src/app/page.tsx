@@ -387,7 +387,6 @@ export default function GeminiContentForgePage() {
       if (!src || src.trim() === "") {
         return alt ? <span className="text-xs text-muted-foreground italic">[Image: {alt} - Not found/loaded]</span> : null;
       }
-      // eslint-disable-next-line @next/next/no-img-element
       return (
         <img
           src={src}

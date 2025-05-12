@@ -36,10 +36,16 @@ const generateImageFlow = ai.defineFlow(
 
     try {
       const { media } = await ai.generate({
-        model: 'googleai/gemini-2.0-flash-exp', // Must use this model for image generation
-        prompt: 'Generate Image without text on it' + input.prompt,
+        model: 'googleai/gemini-2.0-flash-preview-image-generation', // Updated image generation model
+        prompt: 'Generate Image without text on it. ' + input.prompt, // Added instruction to avoid text in images
         config: {
           responseModalities: ['TEXT', 'IMAGE'], // Must include IMAGE
+           safetySettings: [ // Added safety settings to allow more content
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
         },
       });
 
@@ -61,3 +67,4 @@ const generateImageFlow = ai.defineFlow(
 export async function generateImage(input: GenerateImageInput): Promise<GenerateImageOutput> {
   return generateImageFlow(input);
 }
+

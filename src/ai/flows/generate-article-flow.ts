@@ -102,8 +102,9 @@ const generateArticleFlow = ai.defineFlow(
     outputSchema: GenerateArticleOutputSchema,
   },
   async (input) => {
-    const llmResponse = await generateArticlePrompt(input);
     
+    const llmResponse = await generateArticlePrompt(input); 
+
     if (!llmResponse.output || typeof llmResponse.output.articleContent !== 'string') {
       throw new Error('No valid article content received from the LLM.');
     }

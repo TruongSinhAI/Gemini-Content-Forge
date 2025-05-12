@@ -29,7 +29,7 @@ const prompt = ai.definePrompt({
   name: 'suggestTopicsPrompt',
   input: {schema: SuggestTopicsInputSchema},
   output: {schema: SuggestTopicsOutputSchema},
-  prompt: `Suggest topics or keywords related to the following input:\n\n{{input}}\n\nReturn the topics as a JSON array of strings.`, // Removed the enumeration
+  prompt: `Suggest topics or keywords related to the following input:\n\n{{input}}\n\nReturn the topics as a JSON array of strings.`,
 });
 
 const suggestTopicsFlow = ai.defineFlow(
@@ -39,6 +39,7 @@ const suggestTopicsFlow = ai.defineFlow(
     outputSchema: SuggestTopicsOutputSchema,
   },
   async input => {
+ console.log(prompt(input));
     const {output} = await prompt(input);
     return output!;
   }

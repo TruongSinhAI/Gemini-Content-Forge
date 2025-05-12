@@ -19,7 +19,7 @@ const GenerateArticleInputSchema = z.object({
   uploadedContent: z.string().optional().describe('Text content extracted from a user-uploaded document. This is prioritized as primary reference.'),
   additionalContext: z.string().optional().describe('Any additional textual context, description, or notes provided by the user.'),
   outputFormat: z.enum(['text', 'markdown', 'html']).describe("The desired output format: 'text', 'markdown', or 'html'."),
-  numberOfImages: z.number().int().min(0).max(5).optional().describe('Number of images to generate and embed (0-5).'),
+  numberOfImages: z.number().int().min(0).max(5).optional().describe('Number of images to generate and embed (0-5). Default is 0 if not provided.'),
 });
 export type GenerateArticleInput = z.infer<typeof GenerateArticleInputSchema>;
 
@@ -66,7 +66,6 @@ Keywords/Topics to focus on: {{keywords}}
 Content Type to generate: {{contentType}}
 
 {{#if numberOfImages}}
-{{#if (gt numberOfImages 0)}}
 Image Integration Instructions (Generating {{numberOfImages}} image(s)):
 1.  First, generate the complete "{{contentType}}" as described by the user.
 2.  Within this generated textual content, identify {{numberOfImages}} single, most contextually appropriate unique locations for images.
@@ -81,10 +80,6 @@ Image Integration Instructions (Generating {{numberOfImages}} image(s)):
 Example for "numberOfImages: 2":
 'articleContent': "Intro text... {{IMAGE_PLACEHOLDER_0}} More text... {{IMAGE_PLACEHOLDER_1}} Conclusion."
 'imagePromptSuggestions': ["A photo of concept A", "An illustration of concept B"]
-{{else}}
-Image Integration Instructions:
-No images are requested (numberOfImages is 0). Generate only the textual content. Do not include any image placeholders or image prompt suggestions.
-{{/if}}
 {{else}}
 Image Integration Instructions:
 No images are requested. Generate only the textual content. Do not include any image placeholders or image prompt suggestions.
@@ -116,7 +111,9 @@ const generateArticleFlow = ai.defineFlow(
     let finalArticleContent = llmResponse.output.articleContent;
     const imagePromptSuggestions = llmResponse.output.imagePromptSuggestions || [];
     
-    const numImagesToProcess = Math.min(input.numberOfImages || 0, imagePromptSuggestions.length);
+    // Ensure numberOfImages is treated as 0 if undefined or null
+    const requestedNumberOfImages = input.numberOfImages || 0;
+    const numImagesToProcess = Math.min(requestedNumberOfImages, imagePromptSuggestions.length);
 
     if (numImagesToProcess > 0) {
       for (let i = 0; i < numImagesToProcess; i++) {
@@ -128,7 +125,7 @@ const generateArticleFlow = ai.defineFlow(
           const noPromptMessage = `[Image placeholder ${i} had no associated prompt.]`;
           if (input.outputFormat === 'text') {
             finalArticleContent = finalArticleContent.replace(placeholder, `\n${noPromptMessage}\n`);
-          } else {
+          } else { // For MD/HTML
             finalArticleContent = finalArticleContent.replace(placeholder, `\n\n*${noPromptMessage}*\n\n`);
           }
           continue; 
@@ -144,12 +141,13 @@ const generateArticleFlow = ai.defineFlow(
 
             switch (input.outputFormat) {
               case 'html':
-                imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageDataUri.trim()}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`;
+                imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageDataUri.trim()}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" data-ai-hint="illustration content" /></div>`;
                 break;
               case 'markdown':
                 imageEmbedCode = `\n\n![${altText}](${imageDataUri.trim()})\n\n`;
                 break;
               case 'text':
+              default:
                 imageEmbedCode = `\n\n[AI-generated image for: "${promptText}". In HTML/Markdown, this image would be displayed here.]\n\n`;
                 break;
             }

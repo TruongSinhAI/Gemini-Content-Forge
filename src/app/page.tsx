@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye, Github } from "lucide-react";
 import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article-flow';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
@@ -54,6 +55,17 @@ interface SearchResultItem extends ApiSearchResultItem {
   isContentVisible?: boolean;
 }
 
+type ModalFontSize = 'sm' | 'base' | 'lg' | 'xl' | '2xl';
+
+const fontSizeClasses: Record<ModalFontSize, { text: string; prose: string }> = {
+  sm: { text: 'text-sm', prose: 'prose-sm' },
+  base: { text: 'text-base', prose: '' }, // Default prose size
+  lg: { text: 'text-lg', prose: 'prose-lg' },
+  xl: { text: 'text-xl', prose: 'prose-xl' },
+  '2xl': { text: 'text-2xl', prose: 'prose-2xl' },
+};
+
+
 export default function GeminiContentForgePage() {
   const [topicIdea, setTopicIdea] = useState('');
   const [suggestedTopicsList, setSuggestedTopicsList] = useState<string[]>([]);
@@ -79,6 +91,9 @@ export default function GeminiContentForgePage() {
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [copyButtonText, setCopyButtonText] = useState("Copy Article");
   const [showRawOutput, setShowRawOutput] = useState(false);
+
+  const [isArticleViewModalOpen, setIsArticleViewModalOpen] = useState(false);
+  const [modalFontSize, setModalFontSize] = useState<ModalFontSize>('base');
 
 
   const { toast } = useToast();
@@ -367,31 +382,55 @@ export default function GeminiContentForgePage() {
     toast({ title: "Download Started", description: `Article downloaded as ${a.download}.` });
   };
 
+  const markdownComponents = {
+    img: ({ node, src, alt, ...props }: any) => {
+      if (!src || src.trim() === "") {
+        return alt ? <span className="text-xs text-muted-foreground italic">[Image: {alt} - Not found/loaded]</span> : null;
+      }
+      // eslint-disable-next-line @next/next/no-img-element
+      return (
+        <img
+          src={src}
+          alt={alt || ""}
+          style={{
+            maxWidth: '100%',
+            height: 'auto',
+            borderRadius: '0.5rem',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            margin: '1em 0',
+          }}
+          data-ai-hint={alt?.split(" ").slice(0,2).join(" ") || "illustration content"}
+          {...props}
+        />
+      );
+    }
+  };
+
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-background py-8 px-4">
+    <div className="min-h-screen flex flex-col items-center bg-background py-8 px-4 sm:px-6 lg:px-8">
       <header className="mb-10 text-center">
-        <h1 className="text-5xl font-bold text-primary">Gemini Content Forge</h1>
-        <p className="text-muted-foreground mt-2 text-lg">
+        <h1 className="text-4xl sm:text-5xl font-bold text-primary">Gemini Content Forge</h1>
+        <p className="text-muted-foreground mt-2 text-md sm:text-lg">
           AI-Powered Content & Image Generator for your creative needs.
         </p>
       </header>
 
-      <main className="w-full max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         {/* Left Column: Inputs & Tools */}
-        <div className="lg:col-span-1 space-y-8">
+        <div className="lg:col-span-1 space-y-6 md:space-y-8">
             {/* Section 1: Topic Suggester */}
             <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <div className="p-6 bg-card border-b border-border">
+            <div className="p-4 sm:p-6 bg-card border-b border-border">
                 <div className="flex items-center gap-3 mb-1">
-                <Lightbulb className="text-accent w-7 h-7" />
-                <h2 className="text-xl font-semibold leading-none tracking-tight text-foreground">Topic Suggester</h2>
+                <Lightbulb className="text-accent w-6 h-6 sm:w-7 sm:h-7" />
+                <h2 className="text-lg sm:text-xl font-semibold leading-none tracking-tight text-foreground">Topic Suggester</h2>
                 </div>
-                <p className="text-xs text-muted-foreground ml-10">
+                <p className="text-xs text-muted-foreground ml-9 sm:ml-10">
                 Get inspiration! Enter an idea.
                 </p>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
                 <div className="space-y-4">
                 <div className="space-y-1.5">
                     <Label htmlFor="topic-idea" className="text-sm">Your Initial Idea</Label>
@@ -416,7 +455,7 @@ export default function GeminiContentForgePage() {
                             variant="outline" 
                             size="sm" 
                             onClick={() => handleAddTopicToKeywords(topic)}
-                            className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full text-xs px-2.5 py-1"
+                            className="bg-accent/10 hover:bg-accent/20 text-accent-foreground border-accent/30 rounded-full text-xs px-2.5 py-1"
                         >
                             {topic}
                         </Button>
@@ -430,16 +469,16 @@ export default function GeminiContentForgePage() {
 
             {/* Section 2: Web Search */}
             <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <div className="p-6 bg-card border-b border-border">
+            <div className="p-4 sm:p-6 bg-card border-b border-border">
                 <div className="flex items-center gap-3 mb-1">
-                <Search className="text-accent w-7 h-7" />
-                <h2 className="text-xl font-semibold leading-none tracking-tight text-foreground">Web Search</h2>
+                <Search className="text-accent w-6 h-6 sm:w-7 sm:h-7" />
+                <h2 className="text-lg sm:text-xl font-semibold leading-none tracking-tight text-foreground">Web Search</h2>
                 </div>
-                <p className="text-xs text-muted-foreground ml-10">
+                <p className="text-xs text-muted-foreground ml-9 sm:ml-10">
                 Find up-to-date info from Google.
                 </p>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
                 <div className="space-y-4">
                 {searchApiWarning && (
                     <div className="p-2.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-start gap-1.5">
@@ -507,19 +546,19 @@ export default function GeminiContentForgePage() {
         </div>
 
         {/* Right Column: Content Generation & Output */}
-        <div className="lg:col-span-2 space-y-8">
+        <div className="lg:col-span-2 space-y-6 md:space-y-8">
             {/* Section 3: Content Generation Setup */}
             <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <CardHeader className="bg-card p-6 border-b">
+            <CardHeader className="bg-card p-4 sm:p-6 border-b">
                 <div className="flex items-center gap-3 mb-1">
-                    <Settings2 className="text-accent w-7 h-7" />
-                    <CardTitle className="text-xl text-foreground">Content Generation Setup</CardTitle>
+                    <Settings2 className="text-accent w-6 h-6 sm:w-7 sm:h-7" />
+                    <CardTitle className="text-lg sm:text-xl text-foreground">Content Generation Setup</CardTitle>
                 </div>
-                <CardDescription className="ml-10 text-xs">
+                <CardDescription className="ml-9 sm:ml-10 text-xs">
                 Provide details to generate your unique content.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
                 <div className="space-y-5">
                 <div className="space-y-1.5">
                     <Label htmlFor="keywords" className="flex items-center gap-1.5 text-sm">
@@ -673,7 +712,7 @@ export default function GeminiContentForgePage() {
                 </div>
                 </div>
             </CardContent>
-            <CardFooter className="p-6 bg-muted/10 border-t">
+            <CardFooter className="p-4 sm:p-6 bg-muted/10 border-t">
                 <Button onClick={handleGenerateArticle} disabled={isLoadingArticle || isProcessingFile} size="lg" className="w-full">
                 {(isLoadingArticle || isProcessingFile) ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
                 Generate Article
@@ -683,28 +722,28 @@ export default function GeminiContentForgePage() {
             
             { (isLoadingArticle || generatedArticle) && (
             <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-                <CardHeader className="bg-card p-6 border-b flex flex-row items-center justify-between">
+                <CardHeader className="bg-card p-4 sm:p-6 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
-                        <FileText className="text-accent w-7 h-7" />
+                        <FileText className="text-accent w-6 h-6 sm:w-7 sm:h-7" />
                         <div>
-                            <CardTitle className="text-xl text-foreground">Generated Article</CardTitle>
-                            <CardDescription className="text-xs">
+                            <CardTitle className="text-lg sm:text-xl text-foreground">Generated Article</CardTitle>
+                            <CardDescription className="text-xs mt-0.5">
                                 Review your AI-generated content.
                             </CardDescription>
                         </div>
                     </div>
                     {(selectedOutputFormat === 'markdown' || selectedOutputFormat === 'html') && generatedArticle && !isLoadingArticle && (
-                        <Button variant="outline" size="sm" onClick={() => setShowRawOutput(!showRawOutput)}>
+                        <Button variant="outline" size="sm" onClick={() => setShowRawOutput(!showRawOutput)} className="mt-2 sm:mt-0">
                             {showRawOutput ? <Eye className="mr-2 h-4 w-4" /> : <Code className="mr-2 h-4 w-4" />}
                             {showRawOutput ? 'View Rendered' : 'View Raw'}
                         </Button>
                     )}
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                 {isLoadingArticle && !generatedArticle && (
-                    <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-lg p-8 bg-muted/20">
-                        <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                        <p className="mt-4 text-lg text-muted-foreground">Crafting your content...</p>
+                    <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-lg p-4 sm:p-8 bg-muted/20">
+                        <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 animate-spin text-primary" />
+                        <p className="mt-4 text-md sm:text-lg text-muted-foreground">Crafting your content...</p>
                         <p className="text-sm text-muted-foreground">This might take a few moments.</p>
                     </div>
                 )}
@@ -715,7 +754,7 @@ export default function GeminiContentForgePage() {
                             value={generatedArticle}
                             onChange={(e) => setGeneratedArticle(e.target.value)}
                             rows={18}
-                            className="text-sm leading-relaxed font-sans border-input focus:border-primary bg-background p-3 rounded-md shadow-inner w-full h-auto min-h-[400px] sm:min-h-[500px]"
+                            className="text-sm leading-relaxed font-sans border-input focus:border-primary bg-background p-3 rounded-md shadow-inner w-full h-auto min-h-[300px] sm:min-h-[400px] md:min-h-[500px]"
                             placeholder="Your generated article will appear here."
                             aria-label="Generated article content"
                             readOnly={isLoadingArticle} 
@@ -725,41 +764,19 @@ export default function GeminiContentForgePage() {
                             value={generatedArticle}
                             readOnly
                             rows={18}
-                            className="text-sm leading-relaxed font-mono border-input focus:border-primary bg-muted/30 p-3 rounded-md shadow-inner w-full h-auto min-h-[400px] sm:min-h-[500px]"
+                            className="text-sm leading-relaxed font-mono border-input focus:border-primary bg-muted/30 p-3 rounded-md shadow-inner w-full h-auto min-h-[300px] sm:min-h-[400px] md:min-h-[500px]"
                             aria-label={`Raw ${selectedOutputFormat} content`}
                         />
                     ) : selectedOutputFormat === 'markdown' ? (
-                        <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full">
+                        <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[300px] sm:h-[400px] md:h-[500px] w-full">
                             <ReactMarkdown 
                                 remarkPlugins={[remarkGfm]}
-                                components={{
-                                    img: ({ node, src, alt, ...props }) => {
-                                      if (!src || src.trim() === "") {
-                                        return alt ? <span className="text-xs text-muted-foreground italic">[Image: {alt} - Not found/loaded]</span> : null;
-                                      }
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      return (
-                                        <img
-                                          src={src}
-                                          alt={alt || ""}
-                                          style={{
-                                            maxWidth: '100%',
-                                            height: 'auto',
-                                            borderRadius: '0.5rem',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                            margin: '1em 0',
-                                          }}
-                                          data-ai-hint={alt?.split(" ").slice(0,2).join(" ") || "illustration content"}
-                                          {...props}
-                                        />
-                                      );
-                                    }
-                                }}
+                                components={markdownComponents}
                             >{generatedArticle}</ReactMarkdown>
                         </div>
                     ) : selectedOutputFormat === 'html' ? (
                         <div 
-                            className="p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none"
+                            className="p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[300px] sm:h-[400px] md:h-[500px] w-full prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none"
                             dangerouslySetInnerHTML={{ __html: generatedArticle }} 
                         />
                     ) : null}
@@ -767,8 +784,11 @@ export default function GeminiContentForgePage() {
                 )}
                 </CardContent>
                 {generatedArticle && !isLoadingArticle && (
-                    <CardFooter className="p-6 bg-muted/10 border-t">
-                        <div className="flex gap-2 w-full">
+                    <CardFooter className="p-4 sm:p-6 bg-muted/10 border-t">
+                        <div className="flex flex-col sm:flex-row gap-2 w-full">
+                        <Button onClick={() => setIsArticleViewModalOpen(true)} variant="outline" className="flex-1">
+                            <Eye className="mr-2 h-4 w-4" /> View Article
+                        </Button>
                         <Button onClick={handleCopyArticle} variant="outline" className="flex-1">
                             <Copy className="mr-2 h-4 w-4" /> {copyButtonText}
                         </Button>
@@ -783,27 +803,76 @@ export default function GeminiContentForgePage() {
         </div>
       </main>
 
-      <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm w-full max-w-4xl mx-auto border-t pt-8">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p>&copy; {new Date().getFullYear()} Gemini Content Forge. </p>
-            <div className="flex items-center gap-2">
+      <footer className="mt-12 sm:mt-16 mb-8 text-center text-muted-foreground text-xs sm:text-sm w-full max-w-6xl mx-auto border-t pt-6 sm:pt-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-4">
+            <p>&copy; {new Date().getFullYear()} Gemini Content Forge.</p>
+            <div className="flex items-center gap-1.5">
                 <p className="text-muted-foreground">Crafted by</p>
                 <a
                     href="https://github.com/TruongSinhAI"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-primary hover:underline hover:text-primary/80 transition-colors"
+                    className="flex items-center gap-1 text-primary hover:underline hover:text-primary/80 transition-colors"
                     aria-label="TruongSinhAI's GitHub Profile"
                 >
-                    <Github className="w-4 h-4" />
+                    <Github className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     TruongSinhAI
                 </a>
             </div>
             <p className="text-muted-foreground">Powered by Generative AI.</p>
         </div>
       </footer>
+
+      {/* Article View Modal */}
+      <Dialog open={isArticleViewModalOpen} onOpenChange={setIsArticleViewModalOpen}>
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-7xl w-[95vw] md:w-[90vw] max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 pb-4 border-b">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <DialogTitle className="text-lg sm:text-xl">View Generated Article</DialogTitle>
+                <div className="flex items-center gap-1 mt-2 sm:mt-0">
+                    <Button variant={modalFontSize === 'sm' ? "default" : "outline"} size="sm" onClick={() => setModalFontSize('sm')}>S</Button>
+                    <Button variant={modalFontSize === 'base' ? "default" : "outline"} size="sm" onClick={() => setModalFontSize('base')}>M</Button>
+                    <Button variant={modalFontSize === 'lg' ? "default" : "outline"} size="sm" onClick={() => setModalFontSize('lg')}>L</Button>
+                    <Button variant={modalFontSize === 'xl' ? "default" : "outline"} size="sm" onClick={() => setModalFontSize('xl')}>XL</Button>
+                    <Button variant={modalFontSize === '2xl' ? "default" : "outline"} size="sm" onClick={() => setModalFontSize('2xl')}>XXL</Button>
+                </div>
+            </div>
+            <DialogDescription className="text-xs sm:text-sm pt-1">
+              Adjust text size for better readability. Format: {selectedOutputFormat.toUpperCase()}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-grow overflow-y-auto p-6">
+            {selectedOutputFormat === 'text' ? (
+              <Textarea
+                readOnly
+                value={generatedArticle}
+                className={cn(
+                  "w-full h-full min-h-[calc(80vh-150px)] font-mono bg-transparent border-0 shadow-none resize-none focus-visible:ring-0 p-0",
+                  fontSizeClasses[modalFontSize].text
+                )}
+              />
+            ) : (
+              <div className={cn(
+                  "max-w-none", 
+                  selectedOutputFormat === 'html' || selectedOutputFormat === 'markdown' ? `prose dark:prose-invert ${fontSizeClasses[modalFontSize].prose}` : fontSizeClasses[modalFontSize].text
+              )}>
+                {selectedOutputFormat === 'markdown' ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{generatedArticle}</ReactMarkdown>
+                ) : selectedOutputFormat === 'html' ? (
+                  // Ensure HTML content also gets font size adjustments if not handled by prose
+                  <div className={fontSizeClasses[modalFontSize].text} dangerouslySetInnerHTML={{ __html: generatedArticle }} />
+                ) : null}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="p-6 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsArticleViewModalOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
-
-

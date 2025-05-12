@@ -100,8 +100,19 @@ Target Language: ${input.language || 'English'}. Make sure the entire output is 
     fullPromptText += `\n\nContent Type to generate: ${input.contentType}`;
     fullPromptText += `\n\nInstructions:\n1. If a user-uploaded document is provided, use it as the main foundation for the article.\n2. If additional context is provided, incorporate it intelligently to enhance the article, ensuring it aligns with the uploaded document's theme if one exists.\n3. If no uploaded document is provided, generate the article based on the keywords, additional context (if any), content type, and output format.\n4. Ensure the final article is logical, easy to understand, and directly addresses the specified keywords, content type, and output format.\n5. Generate the entire article STRICTLY in the "Target Language" specified above and in the "Output Format" specified. Do not mix languages or formats.\n6. For 'markdown' or 'html' formats, ensure the output is well-formed and complete. For example, for HTML, include necessary tags. For Markdown, use appropriate syntax for structure and emphasis.`;
     fullPromptText += `\n\nGenerated Article (in ${input.language || 'English'}, format: ${input.outputFormat}):`;
+    
+    // Ensure fullPromptText is not null or undefined before pushing
+    if (fullPromptText) {
+      promptMessages.push({ role: 'user', content: [{ text: fullPromptText }] });
+    } else {
+      // Handle the case where fullPromptText might be empty or undefined, 
+      // though based on current logic it should always have content.
+      // This could involve throwing an error or setting a default message.
+      console.error("Prompt text is empty or undefined. Cannot generate article.");
+      $stream.write("Error: Prompt text is empty.");
+      return; // Exit the flow
+    }
 
-    promptMessages.push({ role: 'user', content: [{ text: fullPromptText }] });
 
     const {stream, response} = ai.generateStream({
       prompt: promptMessages, // Use the constructed messages array
@@ -130,19 +141,6 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
   try {
     const resultStream = await generateArticleStreamFlow(input);
     const encoder = new TextEncoder();
-
-    // Transform Genkit's stream of strings to a ReadableStream<Uint8Array>
-    const transformStream = new TransformStream<string, Uint8Array>({
-      transform(chunk, controller) {
-        controller.enqueue(encoder.encode(chunk));
-      },
-    });
-    
-    // It's important to handle the promise returned by pipeTo to catch errors during piping.
-    // However, Genkit's flow stream might not be a standard ReadableStream<string> directly.
-    // The 'resultStream' from a Genkit flow marked with 'stream:true' and outputSchema: z.string()
-    // should be directly pipeable if it conforms to the expected stream type.
-    // If Genkit `resultStream` is an async iterator, we need to manually read and write.
     
     const readableStream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -152,15 +150,31 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
               controller.enqueue(encoder.encode(chunk));
             }
           }
-          controller.close();
         } catch (error) {
           console.error('Error reading from Genkit stream or encoding:', error);
           let errorMessage = "An unexpected error occurred during content generation streaming.";
           if (error instanceof Error) {
             errorMessage = error.message;
           }
-          controller.enqueue(encoder.encode(`\n\n--- STREAMING ERROR ---\n${errorMessage}`));
-          controller.error(new Error(errorMessage)); 
+          // It's important to check if the controller is still active before enqueuing/erroring
+          if (controller.desiredSize !== null) { // A way to check if controller is active
+            try {
+              controller.enqueue(encoder.encode(`\n\n--- STREAMING ERROR ---\n${errorMessage}`));
+              controller.error(new Error(errorMessage)); 
+            } catch (e) {
+              // Controller might have been closed or errored by another part already
+              console.warn("Controller was already closed or errored when trying to signal stream error:", e);
+            }
+          }
+        } finally {
+          // Ensure close is only called if controller is active
+          if (controller.desiredSize !== null) {
+            try {
+              controller.close();
+            } catch (e) {
+              console.warn("Controller was already closed when trying to close in finally block:", e);
+            }
+          }
         }
       }
     });
@@ -179,7 +193,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
       start(controller) {
         controller.enqueue(encoder.encode(`--- ERROR INITIALIZING STREAM ---\n${errorMessage}`));
         controller.error(new Error(errorMessage));
-        controller.close();
+        // Do not call controller.close() here as controller.error() already closes it.
       }
     });
   }
@@ -214,3 +228,4 @@ Generated Article (in ${input.language || 'English'}, format: ${input.outputForm
   });
   return { article: text || '' };
 }
+

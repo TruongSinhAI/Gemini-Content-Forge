@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, ChevronsUpDown } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, ChevronsUpDown, LanguagesIcon } from "lucide-react";
 import { generateArticle, type GenerateArticleInput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
@@ -16,8 +16,21 @@ import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 
-type ContentType = 'blog post' | 'product description' | 'marketing content';
-const contentTypes: ContentType[] = ['blog post', 'product description', 'marketing content'];
+interface LanguageOption {
+  value: string;
+  label: string;
+}
+
+const supportedLanguages: LanguageOption[] = [
+  { value: 'English', label: 'English' },
+  { value: 'Vietnamese', label: 'Tiếng Việt' },
+  { value: 'Spanish', label: 'Español' },
+  { value: 'French', label: 'Français' },
+  { value: 'German', label: 'Deutsch' },
+  { value: 'Japanese', label: '日本語' },
+  { value: 'Korean', label: '한국어' },
+  { value: 'Chinese (Simplified)', label: '简体中文' },
+];
 
 // Extend the imported SearchResultItem to include UI-specific state like isContentVisible
 interface SearchResultItem extends ApiSearchResultItem {
@@ -40,7 +53,8 @@ export default function GeminiContentForgePage() {
   // Content Generation State
   const [keywords, setKeywords] = useState('');
   const [description, setDescription] = useState(''); 
-  const [selectedContentType, setSelectedContentType] = useState<ContentType | undefined>(undefined);
+  const [customContentType, setCustomContentType] = useState<string>('');
+  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value); // Default to English
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -187,10 +201,18 @@ export default function GeminiContentForgePage() {
 
 
   const handleGenerateArticle = async () => {
-    if (!keywords.trim() || !selectedContentType) {
+    if (!keywords.trim() || !customContentType.trim()) {
       toast({
         title: "Input Required",
-        description: "Please provide keywords and select a content type.",
+        description: "Please provide keywords and a custom content type.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!selectedLanguage) {
+      toast({
+        title: "Input Required",
+        description: "Please select an output language.",
         variant: "destructive",
       });
       return;
@@ -200,7 +222,8 @@ export default function GeminiContentForgePage() {
     try {
       const input: GenerateArticleInput = {
         keywords: keywords,
-        contentType: selectedContentType,
+        contentType: customContentType,
+        language: selectedLanguage,
         uploadedContent: uploadedFileContent || undefined,
         additionalContext: description || undefined,
       };
@@ -259,7 +282,7 @@ export default function GeminiContentForgePage() {
                       variant="outline" 
                       size="sm" 
                       onClick={() => handleAddTopicToKeywords(topic)}
-                      className="bg-accent/10 hover:bg-accent/20 text-accent hover:text-accent-foreground border-accent/30 rounded-full"
+                      className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full"
                     >
                       {topic}
                     </Button>
@@ -422,23 +445,37 @@ export default function GeminiContentForgePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content-type" className="flex items-center gap-1.5">
+              <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
                  <FileText className="w-4 h-4 text-muted-foreground" />
-                Content Type
+                Custom Content Type
               </Label>
-              <Select onValueChange={(value: ContentType) => setSelectedContentType(value)} value={selectedContentType}>
-                <SelectTrigger id="content-type" className="w-full">
-                  <SelectValue placeholder="Select content type" />
+              <Input 
+                id="custom-content-type" 
+                placeholder="e.g., blog post, product review, technical summary" 
+                value={customContentType} 
+                onChange={(e) => setCustomContentType(e.target.value)} 
+              />
+              <p className="text-xs text-muted-foreground">Specify the type of content you want (e.g., email, poem, script).</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="language-select" className="flex items-center gap-1.5">
+                 <LanguagesIcon className="w-4 h-4 text-muted-foreground" />
+                Output Language
+              </Label>
+              <Select onValueChange={(value: string) => setSelectedLanguage(value)} value={selectedLanguage}>
+                <SelectTrigger id="language-select" className="w-full">
+                  <SelectValue placeholder="Select language" />
                 </SelectTrigger>
                 <SelectContent>
-                  {contentTypes.map(type => (
-                    <SelectItem key={type} value={type}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                  {supportedLanguages.map(lang => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Choose the purpose of your content.</p>
+              <p className="text-xs text-muted-foreground">Choose the language for the generated content.</p>
             </div>
           </CardContent>
           <CardFooter className="p-6 bg-muted/30">
@@ -490,3 +527,4 @@ export default function GeminiContentForgePage() {
     </div>
   );
 }
+

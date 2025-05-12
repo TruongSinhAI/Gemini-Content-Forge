@@ -2,7 +2,7 @@
 'use server';
 
 /**
- * @fileOverview Generates a draft article based on keywords, content type, optional uploaded content, and additional context.
+ * @fileOverview Generates a draft article based on keywords, content type, optional uploaded content, additional context, and target language.
  *
  * - generateArticle - A function that generates a draft article.
  * - GenerateArticleInput - The input type for the generateArticle function.
@@ -15,8 +15,9 @@ import {z} from 'genkit';
 const GenerateArticleInputSchema = z.object({
   keywords: z.string().describe('Keywords to guide article generation.'),
   contentType: z
-    .enum(['blog post', 'product description', 'marketing content'])
-    .describe('The type of content to generate.'),
+    .string()
+    .describe('The type of content to generate (e.g., blog post, product description, marketing content, technical whitepaper).'),
+  language: z.string().optional().describe('The target language for the generated article (e.g., "English", "Vietnamese", "Spanish"). Defaults to English if not specified.'),
   uploadedContent: z.string().optional().describe('Optional user-uploaded content (e.g., Markdown text) to use as a primary reference.'),
   additionalContext: z.string().optional().describe('Optional additional context, possibly from search results or user notes.')
 });
@@ -36,6 +37,8 @@ const generateArticlePrompt = ai.definePrompt({
   input: {schema: GenerateArticleInputSchema},
   output: {schema: GenerateArticleOutputSchema},
   prompt: `You are an AI assistant specializing in content generation. Your primary goal is to create a well-structured and coherent "{{contentType}}" based on the provided information.
+
+Target Language: {{#if language}}{{{language}}}{{else}}English{{/if}}. Make sure the entire output is in this language.
 
 {{#if uploadedContent}}
 IMPORTANT: The following user-uploaded document is the MOST CRITICAL source. Prioritize its content above all else. Your generated article should primarily be derived from, expand upon, or summarize this document, tailored to the requested content type and keywords.
@@ -60,8 +63,9 @@ Instructions:
 2. If additional context is provided, incorporate it intelligently to enhance the article, ensuring it aligns with the uploaded document's theme if one exists.
 3. If no uploaded document is provided, generate the article based on the keywords, additional context (if any), and content type.
 4. Ensure the final article is logical, easy to understand, and directly addresses the specified keywords and content type.
+5. Generate the entire article STRICTLY in the "Target Language" specified above. Do not mix languages.
 
-Generated Article:`,
+Generated Article (in {{#if language}}{{{language}}}{{else}}English{{/if}}):`,
 });
 
 const generateArticleFlow = ai.defineFlow(
@@ -75,3 +79,4 @@ const generateArticleFlow = ai.defineFlow(
     return output!;
   }
 );
+

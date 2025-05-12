@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye, Github } from "lucide-react";
 import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article-flow';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
@@ -416,7 +416,7 @@ export default function GeminiContentForgePage() {
                             variant="outline" 
                             size="sm" 
                             onClick={() => handleAddTopicToKeywords(topic)}
-                            className="bg-accent/10 hover:bg-accent/20 text-accent-foreground border-accent/30 rounded-full text-xs px-2.5 py-1"
+                            className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full text-xs px-2.5 py-1"
                         >
                             {topic}
                         </Button>
@@ -749,8 +749,8 @@ export default function GeminiContentForgePage() {
                                             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                                             margin: '1em 0',
                                           }}
+                                          data-ai-hint={alt?.split(" ").slice(0,2).join(" ") || "illustration content"}
                                           {...props}
-                                          data-ai-hint="illustration content"
                                         />
                                       );
                                     }
@@ -783,19 +783,26 @@ export default function GeminiContentForgePage() {
         </div>
       </main>
 
-      <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm">
-        <p>
-          by{' '}
-          <a
-            href="https://github.com/TruongSinhAI"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            https://github.com/TruongSinhAI
-          </a>
-        </p>
+      <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm w-full max-w-4xl mx-auto border-t pt-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p>&copy; {new Date().getFullYear()} Gemini Content Forge. </p>
+            <div className="flex items-center gap-2">
+                <p className="text-muted-foreground">Crafted by</p>
+                <a
+                    href="https://github.com/TruongSinhAI"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-primary hover:underline hover:text-primary/80 transition-colors"
+                    aria-label="TruongSinhAI's GitHub Profile"
+                >
+                    <Github className="w-4 h-4" />
+                    TruongSinhAI
+                </a>
+            </div>
+            <p className="text-muted-foreground">Powered by Generative AI.</p>
+        </div>
       </footer>
     </div>
   );
 }
+

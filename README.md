@@ -3,8 +3,8 @@
 
 **Gemini Content Forge** is an AI-powered content and image generation application built with Next.js, TypeScript, and Google's Genkit. It empowers users to create diverse content such as articles, blog posts, product descriptions, and generate images from textual prompts, by leveraging generative AI. The application offers features like topic suggestion, real-time web research, document uploading for context, multi-language output, AI-driven image embedding, and a standalone image generator.
 
-![Gemini Content Forge Screenshot](https://picsum.photos/1200/600?random=1&blur=2&data-ai-hint=application_screenshot_interface)
-*(Replace with an actual screenshot of the application)*
+![image](https://github.com/user-attachments/assets/5d19d1bf-67cc-4983-88e9-7295d48e933b)
+
 
 ## 🚀 Key Features
 

@@ -67,8 +67,8 @@ export default function GeminiContentForgePage() {
   const [keywords, setKeywords] = useState('');
   const [description, setDescription] = useState(''); 
   const [customContentType, setCustomContentType] = useState<string>('blog post');
-  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value);
-  const [selectedOutputFormat, setSelectedOutputFormat] = useState<OutputFormatOption['value']>(outputFormatOptions[1].value); 
+  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>('Vietnamese');
+  const [selectedOutputFormat, setSelectedOutputFormat] = useState<OutputFormatOption['value']>('html'); 
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -805,4 +805,5 @@ export default function GeminiContentForgePage() {
     </div>
   );
 }
+
 

@@ -14,6 +14,8 @@ import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as A
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import * as pdfjsLib from 'pdfjs-dist';
+import * as XLSX from 'xlsx';
 
 
 interface LanguageOption {
@@ -32,29 +34,24 @@ const supportedLanguages: LanguageOption[] = [
   { value: 'Chinese (Simplified)', label: '简体中文' },
 ];
 
-// Extend the imported SearchResultItem to include UI-specific state like isContentVisible
 interface SearchResultItem extends ApiSearchResultItem {
   isContentVisible?: boolean;
 }
 
 export default function GeminiContentForgePage() {
-  // Topic Suggestion State
   const [topicIdea, setTopicIdea] = useState('');
   const [suggestedTopicsList, setSuggestedTopicsList] = useState<string[]>([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
 
-  // Google Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [searchApiWarning, setSearchApiWarning] = useState<string | null>(null);
 
-
-  // Content Generation State
   const [keywords, setKeywords] = useState('');
   const [description, setDescription] = useState(''); 
   const [customContentType, setCustomContentType] = useState<string>('');
-  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value); // Default to English
+  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value);
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
@@ -75,6 +72,10 @@ export default function GeminiContentForgePage() {
         !customSearchEngineId || customSearchEngineId === 'YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE') {
         setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality may be limited or unavailable.");
     }
+    // Set up PDF.js worker
+    // Using unpkg CDN for the worker. For production, consider hosting it yourself.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
   }, []);
 
 
@@ -159,43 +160,94 @@ export default function GeminiContentForgePage() {
     );
   };
 
-
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith("text/") && !file.name.endsWith(".md") && file.type !== "text/markdown") {
-         toast({ title: "Invalid File Type", description: "Please upload a text-based file (e.g., .txt, .md).", variant: "destructive" });
-         event.target.value = ''; 
+      const allowedMimeTypes = [
+        "text/plain",
+        "text/markdown",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+        "application/vnd.ms-excel" // .xls
+      ];
+      const allowedExtensions = [".txt", ".md", ".pdf", ".xlsx", ".xls"];
+
+      const fileMimeType = file.type;
+      const fileNameLower = file.name.toLowerCase();
+      const fileExtension = fileNameLower.substring(fileNameLower.lastIndexOf('.'));
+
+      const isAllowedMimeType = allowedMimeTypes.includes(fileMimeType);
+      const isAllowedExtension = allowedExtensions.some(ext => fileNameLower.endsWith(ext));
+
+      // Some browsers might not report correct MIME for .md, .xlsx, .xls
+      if (!isAllowedMimeType && !isAllowedExtension) {
+         toast({ title: "Invalid File Type", description: "Please upload a .txt, .md, .pdf, .xlsx, or .xls file.", variant: "destructive" });
+         if (event.target) event.target.value = ''; 
          return;
       }
 
       setIsProcessingFile(true);
       setUploadedFileName(file.name);
+      setUploadedFileContent(null); 
+
       try {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result as string;
+        const arrayBuffer = await file.arrayBuffer();
+
+        if (fileMimeType === "application/pdf" || fileExtension === ".pdf") {
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          let text = "";
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            text += textContent.items.map((item: any) => item.str).join(" ") + "\n"; // item is TextItem
+          }
           setUploadedFileContent(text);
-          toast({ title: "File Uploaded", description: `Successfully read "${file.name}".` });
-          setIsProcessingFile(false);
-        };
-        reader.onerror = () => {
-          toast({ title: "File Read Error", description: "Could not read the file.", variant: "destructive" });
-          setIsProcessingFile(false);
-          setUploadedFileName(null);
-          setUploadedFileContent(null);
-        };
-        reader.readAsText(file);
+          toast({ title: "File Uploaded", description: `Successfully extracted text from PDF "${file.name}".` });
+        
+        } else if (
+          fileMimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || // .xlsx
+          fileMimeType === "application/vnd.ms-excel" || // .xls
+          fileExtension === ".xlsx" ||
+          fileExtension === ".xls"
+        ) {
+          const workbook = XLSX.read(arrayBuffer, { type: "buffer" });
+          let text = "";
+          workbook.SheetNames.forEach(sheetName => {
+            text += `--- Sheet: ${sheetName} ---\n`;
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
+            jsonData.forEach((row: any[]) => {
+              text += row.join("\t") + "\n"; // Tab-separated values for rows
+            });
+            text += "\n";
+          });
+          setUploadedFileContent(text.trim());
+          toast({ title: "File Uploaded", description: `Successfully extracted text from Excel file "${file.name}".` });
+
+        } else { // Default to text/markdown
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const text = e.target?.result as string;
+            setUploadedFileContent(text);
+            toast({ title: "File Uploaded", description: `Successfully read "${file.name}".` });
+          };
+          reader.onerror = () => {
+            throw new Error("Could not read the file using FileReader.");
+          };
+          reader.readAsText(file); // For plain text and markdown, read as text directly
+        }
       } catch (error) {
         console.error("Error processing file:", error);
-        toast({ title: "File Error", description: "Failed to process uploaded file.", variant: "destructive" });
-        setIsProcessingFile(false);
+        toast({ title: "File Error", description: `Failed to process uploaded file. ${error instanceof Error ? error.message : 'Unknown error'}`, variant: "destructive" });
         setUploadedFileName(null);
         setUploadedFileContent(null);
+      } finally {
+        setIsProcessingFile(false);
       }
     }
     if (event.target) {
-        event.target.value = '';
+        event.target.value = ''; // Reset input value to allow re-uploading the same file
     }
   };
 
@@ -325,7 +377,7 @@ export default function GeminiContentForgePage() {
               </div>
             </div>
             {searchResults.length > 0 && (
-              <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto"> {/* Increased max-h */}
+              <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto">
                 <h3 className="font-semibold text-foreground">Search Results:</h3>
                 <Accordion type="multiple" className="w-full">
                   {searchResults.map((result, index) => (
@@ -395,7 +447,7 @@ export default function GeminiContentForgePage() {
             <div className="space-y-2">
               <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
                 <UploadCloud className="w-4 h-4 text-muted-foreground" />
-                Upload Document (Optional, .txt or .md)
+                Upload Document (Optional, .txt, .md, .pdf, .xlsx, .xls)
               </Label>
               <div className="flex items-center gap-2">
                 <Button
@@ -414,7 +466,7 @@ export default function GeminiContentForgePage() {
                 <Input 
                   id="file-upload-input" 
                   type="file" 
-                  accept=".md,text/markdown,text/plain" 
+                  accept=".txt,.md,.pdf,.xlsx,.xls,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleFileUpload} 
                   className="hidden" 
                   disabled={isProcessingFile}
@@ -426,7 +478,7 @@ export default function GeminiContentForgePage() {
                 )}
               </div>
                {uploadedFileName && <p className="text-xs text-primary">Using: {uploadedFileName}</p>}
-               {!uploadedFileName && <p className="text-xs text-muted-foreground">Upload a text or Markdown file to use as primary reference for generation.</p>}
+               {!uploadedFileName && <p className="text-xs text-muted-foreground">Upload a text, Markdown, PDF, or Excel file to use as primary reference.</p>}
             </div>
             
             <div className="space-y-2">
@@ -527,4 +579,3 @@ export default function GeminiContentForgePage() {
     </div>
   );
 }
-

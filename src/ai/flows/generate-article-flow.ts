@@ -76,7 +76,7 @@ const generateArticleFlow = ai.defineFlow(
     outputSchema: GenerateArticleOutputSchema,
   },
   async (input) => {
-    const { output } = await generateArticlePrompt(input); // Pass input directly to prompt
+    const { output } = await generateArticlePrompt(input); 
     if (!output || typeof output.article !== 'string') { 
       throw new Error('No valid article content received from generateArticlePrompt');
     }
@@ -87,3 +87,4 @@ const generateArticleFlow = ai.defineFlow(
 export async function generateArticle(input: GenerateArticleInput): Promise<GenerateArticleOutput> {
   return generateArticleFlow(input);
 }
+

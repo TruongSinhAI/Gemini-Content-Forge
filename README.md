@@ -1,7 +1,7 @@
 
 # Gemini Content Forge
 
-**Gemini Content Forge** is an AI-powered content generation application built with Next.js, TypeScript, and Google's Genkit. It empowers users to create diverse content such as articles, blog posts, product descriptions, and more, by leveraging generative AI. The application offers features like topic suggestion, real-time web research, document uploading for context, and multi-language output.
+**Gemini Content Forge** is an AI-powered content and image generation application built with Next.js, TypeScript, and Google's Genkit. It empowers users to create diverse content such as articles, blog posts, product descriptions, and generate images from textual prompts, by leveraging generative AI. The application offers features like topic suggestion, real-time web research, document uploading for context, multi-language output, and image creation.
 
 ## Features
 
@@ -10,6 +10,10 @@
     *   Specify keywords/topics to guide the AI.
     *   Define custom content types.
     *   Select the desired output language from a list of supported languages.
+    *   Choose output format (Text, Markdown, HTML).
+*   **AI-Powered Image Generation**:
+    *   Generate images from textual prompts using Google's Gemini 2.0 Flash experimental model.
+    *   Describe the desired image, and the AI will create it.
 *   **Topic & Keyword Suggester**:
     *   Input an initial idea and get AI-generated suggestions for related topics and keywords.
     *   Easily add suggested topics to your content generation keywords.
@@ -30,19 +34,21 @@
 ## Tech Stack
 
 *   **Frontend**:
-    *   [Next.js](https://nextjs.org/) (App Router, Server Components, Server Actions)
+    *   [Next.js](https://nextjs.org/) (App Router, Server Components)
     *   [React](https://reactjs.org/)
     *   [TypeScript](https://www.typescriptlang.org/)
     *   [Tailwind CSS](https://tailwindcss.com/)
     *   [ShadCN UI](https://ui.shadcn.com/) (for UI components)
     *   [Lucide React](https://lucide.dev/) (for icons)
+    *   [next/image](https://nextjs.org/docs/pages/api-reference/components/image) (for image optimization)
 *   **Backend/AI**:
     *   [Genkit (Firebase Genkit)](https://firebase.google.com/docs/genkit) - An open-source framework to build, deploy, and monitor AI-powered features.
         *   `@genkit-ai/googleai` plugin for integrating with Google's Gemini models.
-    *   Google Gemini Models (via Genkit) for text generation and content extraction.
+    *   Google Gemini Models (via Genkit) for text generation, content extraction, and image generation.
 *   **Utilities**:
     *   `pdfjs-dist` for PDF text extraction.
     *   `xlsx` for Excel file text extraction.
+    *   `react-markdown` and `remark-gfm` for Markdown rendering.
 
 ## Getting Started
 
@@ -82,6 +88,7 @@
     CUSTOM_SEARCH_ENGINE_ID=YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE
 
     # Ensure your Google API Key has "Custom Search API" and "Vertex AI API" (or "Generative Language API" if using older Gemini models directly) enabled in the Google Cloud Console.
+    # For Image Generation, ensure the Vertex AI API is enabled and the specific model (gemini-2.0-flash-exp) is accessible.
     ```
 
     *   `YOUR_GOOGLE_API_KEY_HERE`: Your API key from Google Cloud Console. Ensure the "Custom Search API" and "Vertex AI API" (or "Generative Language API") are enabled for this key.
@@ -120,11 +127,18 @@
     *   **Upload Document (Optional)**: Click "Choose a file..." to upload a `.txt`, `.md`, `.pdf`, `.xlsx`, or `.xls` file. The text content will be extracted and used as a primary reference by the AI.
     *   **Additional Context / Description (Optional)**: Provide any extra notes, a short description, or paste snippets from web search results here.
     *   **Custom Content Type**: Specify the type of content you want (e.g., "blog post," "product review," "technical summary," "email," "poem").
+    *   **Output Format**: Choose between Plain Text, Markdown, or HTML.
     *   **Output Language**: Select the target language for the generated content.
 4.  **Generate Article**:
     *   Once all relevant fields are filled, click "Generate Article".
     *   The AI will process your inputs and generate the content.
-    *   The generated article will appear in the "Generated Article" section, where you can review and edit it.
+    *   The generated article will appear in the "Generated Article" section, where you can review and edit it (for text format) or view the rendered output (for Markdown/HTML).
+5.  **Image Generation**:
+    *   Navigate to the "Image Generation" section.
+    *   Enter a descriptive prompt in the "Image Prompt" field (e.g., "a majestic lion in a snowy forest").
+    *   Click "Generate Image".
+    *   The AI will generate an image based on your prompt.
+    *   The generated image will be displayed below the prompt.
 
 ## Genkit Integration
 
@@ -135,11 +149,14 @@ This project uses Genkit to orchestrate calls to Google's Gemini AI models for v
     *   Performs a Google Custom Search using the provided API key and CX ID.
     *   For each search result URL, it attempts to fetch the HTML content.
     *   Calls the `extract-html-content.ts` flow to get the main text from the fetched HTML.
-*   **`extract-html-content.ts`**: Takes raw HTML content and uses an LLM to extract the main textual article, stripping away boilerplate like navigation, footers, ads, etc.
-*   **`generate-article.ts`**:
+*   **`extract-html-content.ts`**: Takes raw HTML content and uses an LLM to extract the main textual article, stripping away boilerplate.
+*   **`generate-article-flow.ts`**:
     *   The core content generation flow.
-    *   Takes keywords, content type, target language, optional uploaded document content, and optional additional context.
-    *   Constructs a prompt for the Gemini model to generate the desired article, prioritizing uploaded content if provided.
+    *   Takes keywords, content type, target language, output format, optional uploaded document content, and optional additional context.
+    *   Constructs a prompt for the Gemini model to generate the desired article.
+*   **`generate-image.ts`**:
+    *   Generates an image from a textual prompt using `gemini-2.0-flash-exp` model.
+    *   Takes a prompt string and returns a data URI of the generated image.
 
 All Genkit flows are defined in the `src/ai/flows/` directory and are initialized in `src/ai/genkit.ts`. The Genkit development server can be started with `npm run genkit:dev` for debugging and flow inspection.
 
@@ -152,7 +169,8 @@ All Genkit flows are defined in the `src/ai/flows/` directory and are initialize
 │   ├── ai/                  # Genkit related files
 │   │   ├── flows/           # Genkit flow definitions
 │   │   │   ├── extract-html-content.ts
-│   │   │   ├── generate-article.ts
+│   │   │   ├── generate-article-flow.ts
+│   │   │   ├── generate-image.ts  # New
 │   │   │   ├── google-search.ts
 │   │   │   └── suggest-topics.ts
 │   │   ├── dev.ts           # Genkit development server entry point
@@ -168,6 +186,7 @@ All Genkit flows are defined in the `src/ai/flows/` directory and are initialize
 │   │   └── use-toast.ts
 │   ├── lib/                 # Utility functions
 │   │   └── utils.ts
+├── .env                     # Local environment variables (create this from .env.example)
 ├── .env.example             # Example environment variables
 ├── components.json          # ShadCN UI configuration
 ├── next.config.ts
@@ -178,13 +197,12 @@ All Genkit flows are defined in the `src/ai/flows/` directory and are initialize
 
 ## Potential Future Enhancements
 
-*   **Streaming Output**: Implement streaming for generated articles for a better user experience with longer content.
-*   **Image Generation**: Integrate image generation capabilities (e.g., using Gemini's image generation features via Genkit) based on article content or keywords.
-*   **Advanced Formatting**: Allow more control over the output format (e.g., Markdown, HTML).
-*   **User Accounts & History**: Save generated content and user preferences.
+*   **Streaming Output for Articles**: Re-implement streaming for generated articles for a better user experience with longer content (currently disabled due to complexity, but a good future goal).
+*   **More Advanced Image Editing/Control**: Allow options like aspect ratio, style guidance, or negative prompts for image generation.
+*   **User Accounts & History**: Save generated content, images, and user preferences.
 *   **More Sophisticated Context Management**: Allow users to select specific parts of search results or uploaded documents to include.
-*   **Tone & Style Customization**: Provide options to specify the tone (e.g., formal, casual, humorous) or style of the generated content.
-*   **Error Handling and Retries**: More robust error handling for API calls and content generation.
+*   **Tone & Style Customization for Articles**: Provide options to specify the tone (e.g., formal, casual, humorous) or style of the generated content.
+*   **Error Handling and Retries**: More robust error handling for API calls and content generation, possibly with backoff strategies.
 
 ## Contributing
 

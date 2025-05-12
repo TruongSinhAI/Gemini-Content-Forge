@@ -2,16 +2,18 @@
 "use client";
 
 import { useState, type ChangeEvent, useEffect } from 'react';
+import Image from 'next/image'; // Import next/image
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X } from "lucide-react";
-import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article';
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon } from "lucide-react";
+import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article-flow';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
+import { generateImage, type GenerateImageInput, type GenerateImageOutput } from '@/ai/flows/generate-image';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -74,6 +76,10 @@ export default function GeminiContentForgePage() {
   const [generatedArticle, setGeneratedArticle] = useState('');
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | null>(null);
+
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
 
 
   const { toast } = useToast();
@@ -303,12 +309,39 @@ export default function GeminiContentForgePage() {
     }
   };
 
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      toast({ title: "Input Required", description: "Please enter a prompt for image generation.", variant: "destructive" });
+      return;
+    }
+    setIsLoadingImage(true);
+    setGeneratedImageDataUri(null);
+    try {
+      const input: GenerateImageInput = { prompt: imagePrompt };
+      const result: GenerateImageOutput = await generateImage(input);
+      
+      if (result && result.imageDataUri) {
+        setGeneratedImageDataUri(result.imageDataUri);
+        toast({ title: "Image Generated!", description: "Your image is ready." });
+      } else {
+        toast({ title: "Image Generation Error", description: "Failed to generate image or received an empty response.", variant: "destructive" });
+      }
+    } catch (error: any) {
+      console.error("Error generating image:", error);
+      const errorMessage = error.message || "Failed to generate image. Please try again.";
+      toast({ title: "Image Generation Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsLoadingImage(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-background py-8 px-4">
       <header className="mb-10 text-center">
         <h1 className="text-5xl font-bold text-primary">Gemini Content Forge</h1>
         <p className="text-muted-foreground mt-2 text-lg">
-          AI-Powered Content Generator for your creative needs.
+          AI-Powered Content & Image Generator for your creative needs.
         </p>
       </header>
 
@@ -586,6 +619,64 @@ export default function GeminiContentForgePage() {
           </CardFooter>
         </Card>
 
+         {/* Section 4: Image Generation */}
+        <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          <CardHeader className="bg-muted/30 p-6">
+            <div className="flex items-center gap-3 mb-1">
+              <ImageIcon className="text-accent w-7 h-7" />
+              <CardTitle className="text-2xl">Image Generation</CardTitle>
+            </div>
+            <CardDescription className="ml-10">
+              Generate an image based on a textual prompt.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="image-prompt" className="flex items-center gap-1.5">
+                  <Lightbulb className="w-4 h-4 text-muted-foreground" />
+                  Image Prompt
+                </Label>
+                <Input 
+                  id="image-prompt" 
+                  placeholder="e.g., a futuristic city skyline at sunset, a cat wearing a wizard hat" 
+                  value={imagePrompt} 
+                  onChange={(e) => setImagePrompt(e.target.value)} 
+                />
+                <p className="text-xs text-muted-foreground">Describe the image you want to create.</p>
+              </div>
+              
+              {isLoadingImage && (
+                <div className="flex flex-col items-center justify-center h-40 border border-dashed rounded-lg p-4 bg-card">
+                  <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                  <p className="mt-3 text-md text-muted-foreground">Generating your image...</p>
+                </div>
+              )}
+
+              {generatedImageDataUri && !isLoadingImage && (
+                <div className="mt-4 pt-4 border-t">
+                  <h3 className="font-semibold text-foreground mb-2">Generated Image:</h3>
+                  <div className="relative w-full aspect-square max-w-md mx-auto bg-muted/20 rounded-lg overflow-hidden border shadow-inner">
+                     <Image 
+                        src={generatedImageDataUri} 
+                        alt={imagePrompt || "Generated image"} 
+                        layout="fill"
+                        objectFit="contain"
+                        data-ai-hint="generated art"
+                      />
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter className="p-6 bg-muted/30 border-t border-border">
+            <Button onClick={handleGenerateImage} disabled={isLoadingImage} size="lg" className="w-full">
+              {isLoadingImage ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
+              Generate Image
+            </Button>
+          </CardFooter>
+        </Card>
+
         { (isLoadingArticle || generatedArticle) && (
           <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <CardHeader className="bg-muted/30 p-6">
@@ -605,7 +696,7 @@ export default function GeminiContentForgePage() {
                     <p className="text-sm text-muted-foreground">This might take a few moments as the AI writes.</p>
                  </div>
               )}
-              {generatedArticle && ( // Show generated article regardless of isLoadingArticle for responsiveness with stream
+              {generatedArticle && ( 
                 <div className="generated-content-output-area min-h-[200px]">
                   {selectedOutputFormat === 'text' && (
                     <Textarea 
@@ -615,7 +706,7 @@ export default function GeminiContentForgePage() {
                       className="text-base leading-relaxed border-input focus:border-primary bg-background p-4 rounded-md shadow-inner w-full h-auto min-h-[400px]"
                       placeholder="Your generated article will appear here."
                       aria-label="Generated article content"
-                      readOnly={isLoadingArticle} // Make read-only while loading new content
+                      readOnly={isLoadingArticle} 
                     />
                   )}
                   {selectedOutputFormat === 'markdown' && (

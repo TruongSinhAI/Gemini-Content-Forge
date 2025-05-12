@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type ChangeEvent, useEffect } from 'react';
@@ -665,7 +666,7 @@ export default function GeminiContentForgePage() {
                                 if (!isNaN(val)) {
                                     setNumberOfImages(Math.max(0, Math.min(5, val)))
                                 } else if (e.target.value === '') {
-                                    setNumberOfImages(0); // Or handle as preferred, e.g. keep previous valid value
+                                    setNumberOfImages(0); 
                                 }
                             }}
                             className="w-full"
@@ -732,10 +733,30 @@ export default function GeminiContentForgePage() {
                         />
                     ) : selectedOutputFormat === 'markdown' ? (
                         <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}
+                            <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
                                 components={{
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    img: ({node, ...props}) => <img {...props} style={{maxWidth: '100%', height: 'auto', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', margin: '1em 0'}} alt={props.alt || ""} />
+                                    img: ({ node, src, alt, ...props }) => {
+                                      if (!src || src.trim() === "") {
+                                        return alt ? <span className="text-xs text-muted-foreground italic">[Image: {alt} - Not found/loaded]</span> : null;
+                                      }
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      return (
+                                        <img
+                                          src={src}
+                                          alt={alt || ""}
+                                          style={{
+                                            maxWidth: '100%',
+                                            height: 'auto',
+                                            borderRadius: '0.5rem',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                            margin: '1em 0',
+                                          }}
+                                          {...props}
+                                          data-ai-hint="illustration content"
+                                        />
+                                      );
+                                    }
                                 }}
                             >{generatedArticle}</ReactMarkdown>
                         </div>

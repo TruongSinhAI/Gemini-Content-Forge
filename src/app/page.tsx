@@ -48,9 +48,13 @@ export default function GeminiContentForgePage() {
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
     // Check for API keys on mount to display warning if not set for Google Search
-    if (!process.env.NEXT_PUBLIC_GOOGLE_API_KEY || !process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID) {
-        // Note: Actual check for process.env values for flows happens server-side.
-        // This is a client-side hint. The google-search.ts flow has the actual check.
+    // Note: Actual check for process.env values for flows happens server-side.
+    // This is a client-side hint. The google-search.ts flow has the actual check.
+    const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+    const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
+
+    if (!googleApiKey || googleApiKey === 'YOUR_GOOGLE_API_KEY_HERE' || 
+        !customSearchEngineId || customSearchEngineId === 'YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE') {
         setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality may be limited or unavailable.");
     }
   }, []);
@@ -96,16 +100,22 @@ export default function GeminiContentForgePage() {
       const result = await performGoogleSearch(input);
       setSearchResults(result.results || []);
       if (result.results && result.results.length === 0 && searchQuery.trim() !== "") {
-         toast({ title: "No Results", description: "No search results found. Try a different query or check API configuration." });
+         // Check if it's due to placeholder keys or actual no results
+         const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+         const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
+         if (!googleApiKey || googleApiKey === 'YOUR_GOOGLE_API_KEY_HERE' || 
+             !customSearchEngineId || customSearchEngineId === 'YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE') {
+            setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality is limited. Please update .env file.");
+            toast({ title: "Configuration Incomplete", description: "Google Search API Key or CX ID is not properly configured.", variant: "destructive" });
+         } else {
+            toast({ title: "No Results", description: "No search results found for your query." });
+         }
       }
-      // The flow itself will throw an error if keys are missing, which is caught below.
-      // If it returns empty due to placeholder keys (as per flow logic), this is handled by the message above.
-
     } catch (error: any) {
       console.error("Error searching Google:", error);
       const errorMessage = error.message || "Failed to perform Google search. Please check API key & CX ID configuration in your .env file.";
       toast({ title: "Search Error", description: errorMessage, variant: "destructive" });
-      if (errorMessage.includes("API Key") || errorMessage.includes("CX ID") || errorMessage.includes("configured")) {
+      if (errorMessage.includes("API Key") || errorMessage.includes("CX ID") || errorMessage.includes("configured") || errorMessage.includes("API key not valid")) {
         setSearchApiWarning(errorMessage);
       }
     } finally {
@@ -123,7 +133,7 @@ export default function GeminiContentForgePage() {
     const file = event.target.files?.[0];
     if (file) {
       if (!file.type.startsWith("text/") && !file.name.endsWith(".md") && file.type !== "text/markdown") {
-         toast({ title: "Invalid File Type", description: "Please upload a text-based file, preferably Markdown (.md).", variant: "destructive" });
+         toast({ title: "Invalid File Type", description: "Please upload a text-based file (e.g., .txt, .md).", variant: "destructive" });
          event.target.value = ''; 
          return;
       }
@@ -233,7 +243,7 @@ export default function GeminiContentForgePage() {
                       variant="outline" 
                       size="sm" 
                       onClick={() => handleAddTopicToKeywords(topic)}
-                      className="bg-accent/10 hover:bg-accent/20 text-accent-foreground border-accent/30 rounded-full"
+                      className="bg-accent/10 hover:bg-accent/20 text-accent hover:text-accent-foreground border-accent/30 rounded-full"
                     >
                       {topic}
                     </Button>
@@ -258,7 +268,7 @@ export default function GeminiContentForgePage() {
              {searchApiWarning && (
                 <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2">
                     <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                    <p>{searchApiWarning} Please ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID are correctly set in your .env file.</p>
+                    <p>{searchApiWarning} Ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID are in .env and start with NEXT_PUBLIC_ .</p>
                 </div>
             )}
             <div className="space-y-2">
@@ -330,7 +340,7 @@ export default function GeminiContentForgePage() {
             <div className="space-y-2">
               <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
                 <UploadCloud className="w-4 h-4 text-muted-foreground" />
-                Upload Document (Optional, Markdown .md preferred)
+                Upload Document (Optional, .txt or .md)
               </Label>
               <div className="flex items-center gap-2">
                 <Button

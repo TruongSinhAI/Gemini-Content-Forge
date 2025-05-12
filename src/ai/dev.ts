@@ -3,3 +3,4 @@ config();
 
 import '@/ai/flows/suggest-topics.ts';
 import '@/ai/flows/generate-article.ts';
+import '@/ai/flows/google-search.ts';

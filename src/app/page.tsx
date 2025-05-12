@@ -1,33 +1,60 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, type ChangeEvent, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle } from "lucide-react";
 import { generateArticle, type GenerateArticleInput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
+import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem } from '@/ai/flows/google-search';
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 type ContentType = 'blog post' | 'product description' | 'marketing content';
 const contentTypes: ContentType[] = ['blog post', 'product description', 'marketing content'];
 
 export default function GeminiContentForgePage() {
+  // Topic Suggestion State
   const [topicIdea, setTopicIdea] = useState('');
   const [suggestedTopicsList, setSuggestedTopicsList] = useState<string[]>([]);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
 
+  // Google Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [searchApiWarning, setSearchApiWarning] = useState<string | null>(null);
+
+
+  // Content Generation State
   const [keywords, setKeywords] = useState('');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(''); 
   const [selectedContentType, setSelectedContentType] = useState<ContentType | undefined>(undefined);
+  const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
   
   const [generatedArticle, setGeneratedArticle] = useState('');
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+    // Check for API keys on mount to display warning if not set for Google Search
+    if (!process.env.NEXT_PUBLIC_GOOGLE_API_KEY || !process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID) {
+        // Note: Actual check for process.env values for flows happens server-side.
+        // This is a client-side hint. The google-search.ts flow has the actual check.
+        setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality may be limited or unavailable.");
+    }
+  }, []);
+
 
   const handleSuggestTopics = async () => {
     if (!topicIdea.trim()) {
@@ -52,9 +79,86 @@ export default function GeminiContentForgePage() {
   };
 
   const handleAddTopicToKeywords = (topic: string) => {
-    setKeywords(prev => prev ? `${prev}, ${topic}` : topic);
+    setKeywords(prev => prev ? `${prev}, ${topic}`.trim() : topic);
     toast({ title: "Keyword Added", description: `"${topic}" added to keywords.` });
   };
+
+  const handleSearchGoogle = async () => {
+    if (!searchQuery.trim()) {
+      toast({ title: "Input Required", description: "Please enter a search query.", variant: "destructive" });
+      return;
+    }
+    setIsLoadingSearch(true);
+    setSearchResults([]);
+    setSearchApiWarning(null); // Clear previous warnings
+    try {
+      const input: GoogleSearchInput = { query: searchQuery };
+      const result = await performGoogleSearch(input);
+      setSearchResults(result.results || []);
+      if (result.results && result.results.length === 0 && searchQuery.trim() !== "") {
+         toast({ title: "No Results", description: "No search results found. Try a different query or check API configuration." });
+      }
+      // The flow itself will throw an error if keys are missing, which is caught below.
+      // If it returns empty due to placeholder keys (as per flow logic), this is handled by the message above.
+
+    } catch (error: any) {
+      console.error("Error searching Google:", error);
+      const errorMessage = error.message || "Failed to perform Google search. Please check API key & CX ID configuration in your .env file.";
+      toast({ title: "Search Error", description: errorMessage, variant: "destructive" });
+      if (errorMessage.includes("API Key") || errorMessage.includes("CX ID") || errorMessage.includes("configured")) {
+        setSearchApiWarning(errorMessage);
+      }
+    } finally {
+      setIsLoadingSearch(false);
+    }
+  };
+
+  const handleAddSnippetToDescription = (snippet: string, title: string) => {
+    const newContext = `\n\n--- Search Result ---\nTitle: ${title}\nSnippet: ${snippet}\n--- End Search Result ---`;
+    setDescription(prev => prev ? `${prev}${newContext}` : newContext.trim());
+    toast({ title: "Context Added", description: "Search result snippet added to Additional Context." });
+  };
+
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("text/") && !file.name.endsWith(".md") && file.type !== "text/markdown") {
+         toast({ title: "Invalid File Type", description: "Please upload a text-based file, preferably Markdown (.md).", variant: "destructive" });
+         event.target.value = ''; 
+         return;
+      }
+
+      setIsProcessingFile(true);
+      setUploadedFileName(file.name);
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result as string;
+          setUploadedFileContent(text);
+          toast({ title: "File Uploaded", description: `Successfully read "${file.name}".` });
+          setIsProcessingFile(false);
+        };
+        reader.onerror = () => {
+          toast({ title: "File Read Error", description: "Could not read the file.", variant: "destructive" });
+          setIsProcessingFile(false);
+          setUploadedFileName(null);
+          setUploadedFileContent(null);
+        };
+        reader.readAsText(file);
+      } catch (error) {
+        console.error("Error processing file:", error);
+        toast({ title: "File Error", description: "Failed to process uploaded file.", variant: "destructive" });
+        setIsProcessingFile(false);
+        setUploadedFileName(null);
+        setUploadedFileContent(null);
+      }
+    }
+     // Reset file input value so the same file can be re-uploaded after clearing
+    if (event.target) {
+        event.target.value = '';
+    }
+  };
+
 
   const handleGenerateArticle = async () => {
     if (!keywords.trim() || !selectedContentType) {
@@ -69,8 +173,10 @@ export default function GeminiContentForgePage() {
     setGeneratedArticle('');
     try {
       const input: GenerateArticleInput = {
-        keywords: `${keywords}${description ? ". Additional context: " + description : ""}`,
+        keywords: keywords,
         contentType: selectedContentType,
+        uploadedContent: uploadedFileContent || undefined,
+        additionalContext: description || undefined,
       };
       const result = await generateArticle(input);
       setGeneratedArticle(result.article);
@@ -141,6 +247,64 @@ export default function GeminiContentForgePage() {
         <Card className="shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="bg-muted/30 p-6">
             <CardTitle className="flex items-center gap-2 text-2xl">
+              <Search className="text-accent w-7 h-7" />
+              Real-time Web Search
+            </CardTitle>
+            <CardDescription>
+              Find up-to-date information from Google to enrich your content.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 p-6">
+             {searchApiWarning && (
+                <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <p>{searchApiWarning} Please ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID are correctly set in your .env file.</p>
+                </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="google-search-query">Search Query</Label>
+              <div className="flex gap-2">
+                <Input 
+                  id="google-search-query" 
+                  placeholder="e.g., latest AI advancements, climate change impact 2024" 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                />
+                <Button onClick={handleSearchGoogle} disabled={isLoadingSearch}>
+                  {isLoadingSearch ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+            {searchResults.length > 0 && (
+              <div className="mt-4 space-y-3 pt-4 border-t max-h-80 overflow-y-auto">
+                <h3 className="font-semibold text-foreground">Search Results:</h3>
+                {searchResults.map((result, index) => (
+                  <Card key={index} className="bg-muted/20 p-3 shadow-sm">
+                    <h4 className="font-medium text-primary mb-1">{result.title}</h4>
+                    <p className="text-sm text-muted-foreground mb-2 text-ellipsis overflow-hidden max-h-20">{result.snippet}</p>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1">
+                            <LinkIcon className="w-3 h-3" /> Visit Source
+                        </a>
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleAddSnippetToDescription(result.snippet, result.title)}
+                            className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1"
+                        >
+                            <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add to Context
+                        </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg rounded-xl overflow-hidden">
+          <CardHeader className="bg-muted/30 p-6">
+            <CardTitle className="flex items-center gap-2 text-2xl">
               <Settings2 className="text-accent w-7 h-7" />
               Content Generation Setup
             </CardTitle>
@@ -164,18 +328,55 @@ export default function GeminiContentForgePage() {
             </div>
             
             <div className="space-y-2">
+              <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
+                <UploadCloud className="w-4 h-4 text-muted-foreground" />
+                Upload Document (Optional, Markdown .md preferred)
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                    variant="outline"
+                    onClick={() => document.getElementById('file-upload-input')?.click()}
+                    disabled={isProcessingFile}
+                    className={cn("w-full justify-start text-left font-normal", uploadedFileName && "border-primary")}
+                >
+                  {isProcessingFile ? (
+                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                  ) : (
+                    <FileUp className="mr-2 h-4 w-4 text-muted-foreground" />
+                  )}
+                  {uploadedFileName || "Choose a file..."}
+                </Button>
+                <Input 
+                  id="file-upload-input" 
+                  type="file" 
+                  accept=".md,text/markdown,text/plain" 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                  disabled={isProcessingFile}
+                />
+                {uploadedFileContent && (
+                  <Button variant="ghost" size="sm" onClick={() => {setUploadedFileContent(null); setUploadedFileName(null);}} className="text-destructive hover:text-destructive">
+                    Clear
+                  </Button>
+                )}
+              </div>
+               {uploadedFileName && <p className="text-xs text-primary">Using: {uploadedFileName}</p>}
+               {!uploadedFileName && <p className="text-xs text-muted-foreground">Upload a text or Markdown file to use as primary reference for generation.</p>}
+            </div>
+            
+            <div className="space-y-2">
               <Label htmlFor="description" className="flex items-center gap-1.5">
                 <BookText className="w-4 h-4 text-muted-foreground" />
-                Brief Description (Optional)
+                Additional Context / Description (Optional)
               </Label>
               <Textarea 
                 id="description" 
-                placeholder="e.g., An article for beginners about starting an online store..."
+                placeholder="e.g., An article for beginners about starting an online store. Or, paste snippets from search results here."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={3}
+                rows={4}
               />
-              <p className="text-xs text-muted-foreground">A short description or specific points to include.</p>
+              <p className="text-xs text-muted-foreground">A short description, specific points, or search snippets to include.</p>
             </div>
 
             <div className="space-y-2">
@@ -199,8 +400,8 @@ export default function GeminiContentForgePage() {
             </div>
           </CardContent>
           <CardFooter className="p-6 bg-muted/30">
-            <Button onClick={handleGenerateArticle} disabled={isLoadingArticle} size="lg" className="w-full">
-              {isLoadingArticle ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
+            <Button onClick={handleGenerateArticle} disabled={isLoadingArticle || isProcessingFile} size="lg" className="w-full">
+              {(isLoadingArticle || isProcessingFile) ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
               Generate Article
             </Button>
           </CardFooter>
@@ -241,8 +442,8 @@ export default function GeminiContentForgePage() {
       </main>
 
       <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm">
-        <p>&copy; {new Date().getFullYear()} Gemini Content Forge. All rights reserved.</p>
-        <p>Powered by Generative AI</p>
+        {currentYear && <p>&copy; {currentYear} Gemini Content Forge. All rights reserved.</p>}
+        <p>Powered by Generative AI.</p>
       </footer>
     </div>
   );

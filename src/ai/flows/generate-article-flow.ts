@@ -70,7 +70,9 @@ Content Type to generate: {{contentType}}
 Image Integration Instructions (Generating {{numberOfImages}} image(s)):
 1.  First, generate the complete "{{contentType}}" as described by the user.
 2.  Within this generated textual content, identify {{numberOfImages}} single, most contextually appropriate unique locations for images.
-3.  At each chosen location, you MUST insert a unique placeholder string: '{{IMAGE_PLACEHOLDER_0}}' for the first image, '{{IMAGE_PLACEHOLDER_1}}' for the second, and so on, up to '{{IMAGE_PLACEHOLDER_{{subtract numberOfImages 1}}}}'.
+3.  At each chosen location, you MUST insert a unique placeholder string. The placeholders must be in the format '{{IMAGE_PLACEHOLDER_X}}', where X is a zero-based index (e.g., '{{IMAGE_PLACEHOLDER_0}}', '{{IMAGE_PLACEHOLDER_1}}', etc.).
+    If {{numberOfImages}} images are requested, generate placeholders sequentially from '{{IMAGE_PLACEHOLDER_0}}' up to the placeholder corresponding to the ({{numberOfImages}} - 1)-th index.
+    For example, if {{numberOfImages}} is 3, the placeholders would be '{{IMAGE_PLACEHOLDER_0}}', '{{IMAGE_PLACEHOLDER_1}}', and '{{IMAGE_PLACEHOLDER_2}}'.
     DO NOT add any other text, markdown, or HTML tags around these placeholders. Just the placeholder itself.
 4.  After determining placeholder locations and generating the article text, create an array of {{numberOfImages}} concise and descriptive image generation prompts (max 20 words each). Each prompt in the 'imagePromptSuggestions' array should correspond to its placeholder (e.g., the first prompt for '{{IMAGE_PLACEHOLDER_0}}').
 5.  The final textual article content you provide in the 'articleContent' field must contain these '{{IMAGE_PLACEHOLDER_X}}' strings.

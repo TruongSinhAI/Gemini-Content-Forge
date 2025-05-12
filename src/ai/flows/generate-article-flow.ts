@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview Generates an article based on user inputs, supporting various formats, languages, and optional integrated image generation.
@@ -117,32 +116,38 @@ const generateArticleFlow = ai.defineFlow(
     if (input.includeImage && imagePromptSuggestion && imagePromptSuggestion.trim() !== "" && finalArticleContent.includes('{{IMAGE_PLACEHOLDER}}')) {
       try {
         const imageResult = await generateImage({ prompt: imagePromptSuggestion });
-        if (imageResult && imageResult.imageDataUri) {
+        
+        // Ensure imageDataUri is a valid, non-empty, non-whitespace string
+        if (imageResult && imageResult.imageDataUri && imageResult.imageDataUri.trim() !== "") {
           let imageEmbedCode = '';
           const altText = imagePromptSuggestion || `Generated image for ${input.contentType}`;
 
           switch (input.outputFormat) {
             case 'html':
-              imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageResult.imageDataUri}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`;
+              imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageResult.imageDataUri.trim()}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`;
               break;
             case 'markdown':
-              imageEmbedCode = `\n\n![${altText}](${imageResult.imageDataUri})\n\n`;
+              imageEmbedCode = `\n\n![${altText}](${imageResult.imageDataUri.trim()})\n\n`;
               break;
             case 'text':
-              // For plain text, we can't embed an image, so describe it or note its generation.
               imageEmbedCode = `\n\n[An AI-generated image was created for this section based on the prompt: "${imagePromptSuggestion}". In HTML/Markdown formats, this image would be displayed here.]\n\n`;
               break;
           }
           finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', imageEmbedCode);
         } else {
-            // If image generation failed or returned no URI, remove placeholder or add a note
-            finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', input.outputFormat === 'text' ? '\n[Image generation was attempted but failed or did not produce a result.]\n' : '');
+            // If image generation failed or returned no URI / empty or whitespace URI, remove placeholder or add a note
+            finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', 
+                input.outputFormat === 'text' 
+                ? '\n[Image generation was attempted but failed or did not produce a valid image.]\n' 
+                : ''); // For markdown/html, just remove placeholder
         }
       } catch (imageError) {
         console.error('Error generating or embedding image:', imageError);
-        // If image generation fails, replace placeholder with a note or remove it.
         const errorMsg = imageError instanceof Error ? imageError.message : "Unknown error during image generation";
-        finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', input.outputFormat === 'text' ? `\n[Image generation failed: ${errorMsg}]\n` : '');
+        finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', 
+            input.outputFormat === 'text' 
+            ? `\n[Image generation failed: ${errorMsg}]\n` 
+            : ''); // For markdown/html, just remove placeholder
       }
     } else {
         // If no image was requested, or no prompt/placeholder, ensure placeholder is removed if it somehow exists

@@ -251,7 +251,8 @@ Contributions are welcome! If you have ideas for improvements or new features, f
 
 ## 📜 License
 
-This project is currently unlicensed. Please add a license file (e.g., MIT, Apache 2.0) if you intend to distribute or share it publicly.
+This project is licensed under the Apache 2.0 License - see the [LICENSE](./LICENSE) file for details.
+
 
 ---
 

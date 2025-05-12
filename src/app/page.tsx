@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, type ChangeEvent, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, ChevronsUpDown, LanguagesIcon } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon } from "lucide-react";
 import { generateArticle, type GenerateArticleInput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
@@ -72,8 +73,6 @@ export default function GeminiContentForgePage() {
         !customSearchEngineId || customSearchEngineId === 'YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE') {
         setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality may be limited or unavailable.");
     }
-    // Set up PDF.js worker
-    // Using unpkg CDN for the worker. For production, consider hosting it yourself.
     pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
   }, []);
@@ -123,7 +122,7 @@ export default function GeminiContentForgePage() {
          const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
          if (!googleApiKey || googleApiKey === 'YOUR_GOOGLE_API_KEY_HERE' || 
              !customSearchEngineId || customSearchEngineId === 'YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE') {
-            setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality is limited. Please update .env file.");
+            setSearchApiWarning("Google Search API Key or CX ID might not be configured. Search functionality is limited. Please update .env file by adding NEXT_PUBLIC_ prefix to variables.");
             toast({ title: "Configuration Incomplete", description: "Google Search API Key or CX ID is not properly configured.", variant: "destructive" });
          } else {
             toast({ title: "No Results", description: "No search results found for your query." });
@@ -131,7 +130,7 @@ export default function GeminiContentForgePage() {
       }
     } catch (error: any) {
       console.error("Error searching Google:", error);
-      const errorMessage = error.message || "Failed to perform Google search. Please check API key & CX ID configuration in your .env file.";
+      const errorMessage = error.message || "Failed to perform Google search. Please check API key & CX ID configuration in your .env file (ensure they start with NEXT_PUBLIC_).";
       toast({ title: "Search Error", description: errorMessage, variant: "destructive" });
       if (errorMessage.includes("API Key") || errorMessage.includes("CX ID") || errorMessage.includes("configured") || errorMessage.includes("API key not valid")) {
         setSearchApiWarning(errorMessage);
@@ -179,7 +178,6 @@ export default function GeminiContentForgePage() {
       const isAllowedMimeType = allowedMimeTypes.includes(fileMimeType);
       const isAllowedExtension = allowedExtensions.some(ext => fileNameLower.endsWith(ext));
 
-      // Some browsers might not report correct MIME for .md, .xlsx, .xls
       if (!isAllowedMimeType && !isAllowedExtension) {
          toast({ title: "Invalid File Type", description: "Please upload a .txt, .md, .pdf, .xlsx, or .xls file.", variant: "destructive" });
          if (event.target) event.target.value = ''; 
@@ -195,19 +193,19 @@ export default function GeminiContentForgePage() {
 
         if (fileMimeType === "application/pdf" || fileExtension === ".pdf") {
           const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-          const pdf = await loadingTask.promise;
+          const pdfDoc = await loadingTask.promise;
           let text = "";
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const page = await pdfDoc.getPage(i);
             const textContent = await page.getTextContent();
-            text += textContent.items.map((item: any) => item.str).join(" ") + "\n"; // item is TextItem
+            text += textContent.items.map((item: any) => item.str).join(" ") + "\n";
           }
           setUploadedFileContent(text);
           toast({ title: "File Uploaded", description: `Successfully extracted text from PDF "${file.name}".` });
         
         } else if (
-          fileMimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || // .xlsx
-          fileMimeType === "application/vnd.ms-excel" || // .xls
+          fileMimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+          fileMimeType === "application/vnd.ms-excel" ||
           fileExtension === ".xlsx" ||
           fileExtension === ".xls"
         ) {
@@ -218,14 +216,14 @@ export default function GeminiContentForgePage() {
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
             jsonData.forEach((row: any[]) => {
-              text += row.join("\t") + "\n"; // Tab-separated values for rows
+              text += row.join("\t") + "\n";
             });
             text += "\n";
           });
           setUploadedFileContent(text.trim());
           toast({ title: "File Uploaded", description: `Successfully extracted text from Excel file "${file.name}".` });
 
-        } else { // Default to text/markdown
+        } else { 
           const reader = new FileReader();
           reader.onload = (e) => {
             const text = e.target?.result as string;
@@ -235,7 +233,7 @@ export default function GeminiContentForgePage() {
           reader.onerror = () => {
             throw new Error("Could not read the file using FileReader.");
           };
-          reader.readAsText(file); // For plain text and markdown, read as text directly
+          reader.readAsText(file);
         }
       } catch (error) {
         console.error("Error processing file:", error);
@@ -247,7 +245,7 @@ export default function GeminiContentForgePage() {
       }
     }
     if (event.target) {
-        event.target.value = ''; // Reset input value to allow re-uploading the same file
+        event.target.value = ''; 
     }
   };
 
@@ -300,237 +298,249 @@ export default function GeminiContentForgePage() {
       </header>
 
       <main className="w-full max-w-3xl space-y-8">
-        <Card className="shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="bg-muted/30 p-6">
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <Lightbulb className="text-accent w-7 h-7" />
-              Topic & Keyword Suggester
-            </CardTitle>
-            <CardDescription>
-              Get inspiration! Enter an idea to discover related topics and keywords.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-6">
-            <div className="space-y-2">
-              <Label htmlFor="topic-idea">Your Initial Idea</Label>
-              <Input 
-                id="topic-idea" 
-                placeholder="e.g., sustainable gardening, AI in healthcare" 
-                value={topicIdea} 
-                onChange={(e) => setTopicIdea(e.target.value)} 
-              />
+        <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+          {/* Section 1: Topic Suggester */}
+          <div>
+            <div className="p-6 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Lightbulb className="text-accent w-7 h-7" />
+                <h2 className="text-2xl font-semibold leading-none tracking-tight">Topic & Keyword Suggester</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Get inspiration! Enter an idea to discover related topics and keywords.
+              </p>
             </div>
-            <Button onClick={handleSuggestTopics} disabled={isLoadingTopics} className="w-full sm:w-auto">
-              {isLoadingTopics ? <Loader2 className="animate-spin mr-2" /> : <Lightbulb className="mr-2 h-4 w-4" />}
-              Suggest Topics
-            </Button>
-            {suggestedTopicsList.length > 0 && (
-              <div className="mt-4 space-y-2 pt-4 border-t">
-                <h3 className="font-semibold text-foreground">Suggested Topics:</h3>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedTopicsList.map((topic, index) => (
-                    <Button 
-                      key={index} 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleAddTopicToKeywords(topic)}
-                      className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full"
-                    >
-                      {topic}
-                    </Button>
-                  ))}
+            <div className="p-6 border-b border-border">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="topic-idea">Your Initial Idea</Label>
+                  <Input 
+                    id="topic-idea" 
+                    placeholder="e.g., sustainable gardening, AI in healthcare" 
+                    value={topicIdea} 
+                    onChange={(e) => setTopicIdea(e.target.value)} 
+                  />
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="bg-muted/30 p-6">
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <Search className="text-accent w-7 h-7" />
-              Real-time Web Search
-            </CardTitle>
-            <CardDescription>
-              Find up-to-date information from Google to enrich your content. Fetched content is AI-extracted.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 p-6">
-             {searchApiWarning && (
-                <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2">
-                    <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                    <p>{searchApiWarning} Ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID are in .env and start with NEXT_PUBLIC_ .</p>
-                </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="google-search-query">Search Query</Label>
-              <div className="flex gap-2">
-                <Input 
-                  id="google-search-query" 
-                  placeholder="e.g., latest AI advancements, climate change impact 2024" 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                />
-                <Button onClick={handleSearchGoogle} disabled={isLoadingSearch}>
-                  {isLoadingSearch ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
+                <Button onClick={handleSuggestTopics} disabled={isLoadingTopics} className="w-full sm:w-auto">
+                  {isLoadingTopics ? <Loader2 className="animate-spin mr-2" /> : <Lightbulb className="mr-2 h-4 w-4" />}
+                  Suggest Topics
                 </Button>
-              </div>
-            </div>
-            {searchResults.length > 0 && (
-              <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto">
-                <h3 className="font-semibold text-foreground">Search Results:</h3>
-                <Accordion type="multiple" className="w-full">
-                  {searchResults.map((result, index) => (
-                    <AccordionItem value={`item-${index}`} key={index} className="bg-muted/20 p-0 shadow-sm rounded-md mb-2 border">
-                       <AccordionTrigger className="p-3 hover:no-underline w-full text-left">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-primary mb-1 text-base">{result.title}</h4>
-                            <p className="text-sm text-muted-foreground mb-2 text-ellipsis overflow-hidden line-clamp-2">{result.snippet}</p>
-                            <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1">
-                                <LinkIcon className="w-3 h-3" /> Visit Source
-                            </a>
-                          </div>
-                       </AccordionTrigger>
-                      <AccordionContent className="px-3 pb-3">
-                        <div className="border-t pt-3 mt-2">
-                          {result.fetchedContent && (
-                            <div className="mb-3">
-                              <h5 className="text-sm font-semibold text-foreground/80 mb-1">AI Extracted Content:</h5>
-                              <p className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto bg-background/50 p-2 rounded-md border">
-                                {result.fetchedContent}
-                              </p>
-                            </div>
-                          )}
-                          <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleAddSnippetToDescription(result.snippet, result.title, result.fetchedContent)}
-                              className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1 w-full justify-start"
-                          >
-                              <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add Snippet & Extracted Content to Context
-                          </Button>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="bg-muted/30 p-6">
-            <CardTitle className="flex items-center gap-2 text-2xl">
-              <Settings2 className="text-accent w-7 h-7" />
-              Content Generation Setup
-            </CardTitle>
-            <CardDescription>
-              Provide details below to generate your unique content.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 p-6">
-            <div className="space-y-2">
-              <Label htmlFor="keywords" className="flex items-center gap-1.5">
-                <Tags className="w-4 h-4 text-muted-foreground" />
-                Keywords / Topics
-              </Label>
-              <Input 
-                id="keywords" 
-                placeholder="e.g., digital marketing trends, healthy breakfast recipes" 
-                value={keywords} 
-                onChange={(e) => setKeywords(e.target.value)} 
-              />
-              <p className="text-xs text-muted-foreground">Comma-separated keywords or topics that define your content.</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
-                <UploadCloud className="w-4 h-4 text-muted-foreground" />
-                Upload Document (Optional, .txt, .md, .pdf, .xlsx, .xls)
-              </Label>
-              <div className="flex items-center gap-2">
-                <Button
-                    variant="outline"
-                    onClick={() => document.getElementById('file-upload-input')?.click()}
-                    disabled={isProcessingFile}
-                    className={cn("w-full justify-start text-left font-normal", uploadedFileName && "border-primary")}
-                >
-                  {isProcessingFile ? (
-                    <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                  ) : (
-                    <FileUp className="mr-2 h-4 w-4 text-muted-foreground" />
-                  )}
-                  {uploadedFileName || "Choose a file..."}
-                </Button>
-                <Input 
-                  id="file-upload-input" 
-                  type="file" 
-                  accept=".txt,.md,.pdf,.xlsx,.xls,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                  onChange={handleFileUpload} 
-                  className="hidden" 
-                  disabled={isProcessingFile}
-                />
-                {uploadedFileContent && (
-                  <Button variant="ghost" size="sm" onClick={() => {setUploadedFileContent(null); setUploadedFileName(null);}} className="text-destructive hover:text-destructive">
-                    Clear
-                  </Button>
+                {suggestedTopicsList.length > 0 && (
+                  <div className="mt-4 space-y-2 pt-4 border-t">
+                    <h3 className="font-semibold text-foreground">Suggested Topics:</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedTopicsList.map((topic, index) => (
+                        <Button 
+                          key={index} 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleAddTopicToKeywords(topic)}
+                          className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full"
+                        >
+                          {topic}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-               {uploadedFileName && <p className="text-xs text-primary">Using: {uploadedFileName}</p>}
-               {!uploadedFileName && <p className="text-xs text-muted-foreground">Upload a text, Markdown, PDF, or Excel file to use as primary reference.</p>}
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="description" className="flex items-center gap-1.5">
-                <BookText className="w-4 h-4 text-muted-foreground" />
-                Additional Context / Description (Optional)
-              </Label>
-              <Textarea 
-                id="description" 
-                placeholder="e.g., An article for beginners about starting an online store. Or, paste snippets from search results here."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
-              />
-              <p className="text-xs text-muted-foreground">A short description, specific points, or search snippets to include.</p>
-            </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
-                 <FileText className="w-4 h-4 text-muted-foreground" />
-                Custom Content Type
-              </Label>
-              <Input 
-                id="custom-content-type" 
-                placeholder="e.g., blog post, product review, technical summary" 
-                value={customContentType} 
-                onChange={(e) => setCustomContentType(e.target.value)} 
-              />
-              <p className="text-xs text-muted-foreground">Specify the type of content you want (e.g., email, poem, script).</p>
+          {/* Section 2: Web Search */}
+          <div>
+            <div className="p-6 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Search className="text-accent w-7 h-7" />
+                <h2 className="text-2xl font-semibold leading-none tracking-tight">Real-time Web Search</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Find up-to-date information from Google to enrich your content. Fetched content is AI-extracted.
+              </p>
             </div>
+            <div className="p-6 border-b border-border">
+              <div className="space-y-4">
+                {searchApiWarning && (
+                    <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2">
+                        <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                        <p>{searchApiWarning} Ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID in .env start with NEXT_PUBLIC_.</p>
+                    </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="google-search-query">Search Query</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      id="google-search-query" 
+                      placeholder="e.g., latest AI advancements, climate change impact 2024" 
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)} 
+                    />
+                    <Button onClick={handleSearchGoogle} disabled={isLoadingSearch}>
+                      {isLoadingSearch ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                {searchResults.length > 0 && (
+                  <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto">
+                    <h3 className="font-semibold text-foreground">Search Results:</h3>
+                    <Accordion type="multiple" className="w-full">
+                      {searchResults.map((result, index) => (
+                        <AccordionItem value={`item-${index}`} key={index} className="bg-muted/20 hover:bg-muted/30 transition-colors p-0 shadow-sm rounded-md mb-2 border">
+                          <AccordionTrigger className="p-3 hover:no-underline w-full text-left">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-primary mb-1 text-base">{result.title}</h4>
+                                <p className="text-sm text-muted-foreground mb-2 text-ellipsis overflow-hidden line-clamp-2">{result.snippet}</p>
+                                <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1">
+                                    <LinkIcon className="w-3 h-3" /> Visit Source
+                                </a>
+                              </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-3 pb-3">
+                            <div className="border-t pt-3 mt-2">
+                              {result.fetchedContent && (
+                                <div className="mb-3">
+                                  <h5 className="text-sm font-semibold text-foreground/80 mb-1">AI Extracted Content:</h5>
+                                  <p className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto bg-background/50 p-2 rounded-md border">
+                                    {result.fetchedContent}
+                                  </p>
+                                </div>
+                              )}
+                              <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleAddSnippetToDescription(result.snippet, result.title, result.fetchedContent)}
+                                  className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1 w-full justify-start"
+                              >
+                                  <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add Snippet & Extracted Content to Context
+                              </Button>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Section 3: Content Generation Setup */}
+          <div>
+            <div className="p-6 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Settings2 className="text-accent w-7 h-7" />
+                <h2 className="text-2xl font-semibold leading-none tracking-tight">Content Generation Setup</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Provide details below to generate your unique content.
+              </p>
+            </div>
+            <div className="p-6">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="keywords" className="flex items-center gap-1.5">
+                    <Tags className="w-4 h-4 text-muted-foreground" />
+                    Keywords / Topics
+                  </Label>
+                  <Input 
+                    id="keywords" 
+                    placeholder="e.g., digital marketing trends, healthy breakfast recipes" 
+                    value={keywords} 
+                    onChange={(e) => setKeywords(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">Comma-separated keywords or topics that define your content.</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
+                    <UploadCloud className="w-4 h-4 text-muted-foreground" />
+                    Upload Document (Optional, .txt, .md, .pdf, .xlsx, .xls)
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => document.getElementById('file-upload-input')?.click()}
+                        disabled={isProcessingFile}
+                        className={cn("w-full justify-start text-left font-normal hover:bg-muted/50", uploadedFileName && "border-primary text-primary")}
+                    >
+                      {isProcessingFile ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      ) : (
+                        <FileUp className="mr-2 h-4 w-4 text-muted-foreground" />
+                      )}
+                      {uploadedFileName || "Choose a file..."}
+                    </Button>
+                    <Input 
+                      id="file-upload-input" 
+                      type="file" 
+                      accept=".txt,.md,.pdf,.xlsx,.xls,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                      disabled={isProcessingFile}
+                    />
+                    {uploadedFileContent && (
+                      <Button variant="ghost" size="sm" onClick={() => {setUploadedFileContent(null); setUploadedFileName(null);}} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  {uploadedFileName && <p className="text-xs text-primary mt-1">Using: {uploadedFileName}</p>}
+                  {!uploadedFileName && <p className="text-xs text-muted-foreground mt-1">Upload a text, Markdown, PDF, or Excel file to use as primary reference.</p>}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="description" className="flex items-center gap-1.5">
+                    <BookText className="w-4 h-4 text-muted-foreground" />
+                    Additional Context / Description (Optional)
+                  </Label>
+                  <Textarea 
+                    id="description" 
+                    placeholder="e.g., An article for beginners about starting an online store. Or, paste snippets from search results here."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">A short description, specific points, or search snippets to include.</p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="language-select" className="flex items-center gap-1.5">
-                 <LanguagesIcon className="w-4 h-4 text-muted-foreground" />
-                Output Language
-              </Label>
-              <Select onValueChange={(value: string) => setSelectedLanguage(value)} value={selectedLanguage}>
-                <SelectTrigger id="language-select" className="w-full">
-                  <SelectValue placeholder="Select language" />
-                </SelectTrigger>
-                <SelectContent>
-                  {supportedLanguages.map(lang => (
-                    <SelectItem key={lang.value} value={lang.value}>
-                      {lang.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Choose the language for the generated content.</p>
+                <div className="space-y-2">
+                  <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    Custom Content Type
+                  </Label>
+                  <Input 
+                    id="custom-content-type" 
+                    placeholder="e.g., blog post, product review, technical summary" 
+                    value={customContentType} 
+                    onChange={(e) => setCustomContentType(e.target.value)} 
+                  />
+                  <p className="text-xs text-muted-foreground">Specify the type of content you want (e.g., email, poem, script).</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="language-select" className="flex items-center gap-1.5">
+                    <LanguagesIcon className="w-4 h-4 text-muted-foreground" />
+                    Output Language
+                  </Label>
+                  <Select onValueChange={(value: string) => setSelectedLanguage(value)} value={selectedLanguage}>
+                    <SelectTrigger id="language-select" className="w-full">
+                      <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supportedLanguages.map(lang => (
+                        <SelectItem key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Choose the language for the generated content.</p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-          <CardFooter className="p-6 bg-muted/30">
+          </div>
+
+          <CardFooter className="p-6 bg-muted/30 border-t border-border">
             <Button onClick={handleGenerateArticle} disabled={isLoadingArticle || isProcessingFile} size="lg" className="w-full">
               {(isLoadingArticle || isProcessingFile) ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
               Generate Article
@@ -539,7 +549,7 @@ export default function GeminiContentForgePage() {
         </Card>
 
         { (isLoadingArticle || generatedArticle) && (
-          <Card className="shadow-lg rounded-xl overflow-hidden">
+          <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
             <CardHeader className="bg-muted/30 p-6">
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <FileText className="text-accent w-7 h-7" />
@@ -551,7 +561,7 @@ export default function GeminiContentForgePage() {
             </CardHeader>
             <CardContent className="p-6">
               {isLoadingArticle && !generatedArticle && (
-                 <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-md p-8">
+                 <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-md p-8 bg-card">
                     <Loader2 className="w-12 h-12 animate-spin text-primary" />
                     <p className="mt-4 text-lg text-muted-foreground">Crafting your content...</p>
                     <p className="text-sm text-muted-foreground">This might take a few moments.</p>
@@ -579,3 +589,5 @@ export default function GeminiContentForgePage() {
     </div>
   );
 }
+
+    

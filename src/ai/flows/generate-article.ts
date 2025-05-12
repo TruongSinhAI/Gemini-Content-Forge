@@ -101,23 +101,23 @@ Target Language: ${input.language || 'English'}. Make sure the entire output is 
     fullPromptText += `\n\nInstructions:\n1. If a user-uploaded document is provided, use it as the main foundation for the article.\n2. If additional context is provided, incorporate it intelligently to enhance the article, ensuring it aligns with the uploaded document's theme if one exists.\n3. If no uploaded document is provided, generate the article based on the keywords, additional context (if any), content type, and output format.\n4. Ensure the final article is logical, easy to understand, and directly addresses the specified keywords, content type, and output format.\n5. Generate the entire article STRICTLY in the "Target Language" specified above and in the "Output Format" specified. Do not mix languages or formats.\n6. For 'markdown' or 'html' formats, ensure the output is well-formed and complete. For example, for HTML, include necessary tags. For Markdown, use appropriate syntax for structure and emphasis.`;
     fullPromptText += `\n\nGenerated Article (in ${input.language || 'English'}, format: ${input.outputFormat}):`;
     
-    // Ensure fullPromptText is not null or undefined before pushing
-    if (fullPromptText) {
+    if (fullPromptText && fullPromptText.trim()) {
       promptMessages.push({ role: 'user', content: [{ text: fullPromptText }] });
     } else {
-      // Handle the case where fullPromptText might be empty or undefined, 
-      // though based on current logic it should always have content.
-      // This could involve throwing an error or setting a default message.
       console.error("Prompt text is empty or undefined. Cannot generate article.");
       $stream.write("Error: Prompt text is empty.");
-      return; // Exit the flow
+      // Consider closing or aborting the stream if appropriate for Genkit's $stream
+      // For now, returning will prevent ai.generateStream from being called with empty/invalid prompt.
+      return; 
     }
 
 
     const {stream, response} = ai.generateStream({
       prompt: promptMessages, // Use the constructed messages array
-      input: input, // Pass the original input for context if needed by the model or plugins
-      model: 'googleai/gemini-2.0-flash', // Ensure correct model is used
+      // The 'input' parameter is generally for ai.definePrompt-based templating,
+      // not when providing a fully constructed MessageData[] array.
+      // Removing 'input: input' to avoid potential conflicts or misinterpretations.
+      model: 'googleai/gemini-2.0-flash', 
       // output: { schema: GenerateArticleOutputSchema }, // Not needed for direct streaming of text chunks
       config: {
         // You might want to adjust safety settings if you encounter issues with content generation being blocked.
@@ -157,7 +157,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
             errorMessage = error.message;
           }
           // It's important to check if the controller is still active before enqueuing/erroring
-          if (controller.desiredSize !== null) { // A way to check if controller is active
+          if (controller.desiredSize !== null && controller.desiredSize > 0) { // A way to check if controller is active
             try {
               controller.enqueue(encoder.encode(`\n\n--- STREAMING ERROR ---\n${errorMessage}`));
               controller.error(new Error(errorMessage)); 
@@ -168,7 +168,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
           }
         } finally {
           // Ensure close is only called if controller is active
-          if (controller.desiredSize !== null) {
+          if (controller.desiredSize !== null && controller.desiredSize > 0) {
             try {
               controller.close();
             } catch (e) {

@@ -37,7 +37,7 @@ const generateImageFlow = ai.defineFlow(
     try {
       const { media } = await ai.generate({
         model: 'googleai/gemini-2.0-flash-exp', // Must use this model for image generation
-        prompt: input.prompt,
+        prompt: 'Generate Image without text on it' + input.prompt,
         config: {
           responseModalities: ['TEXT', 'IMAGE'], // Must include IMAGE
         },

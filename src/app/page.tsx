@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye } from "lucide-react"; // Added Code, Eye
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye } from "lucide-react";
 import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article-flow';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
@@ -77,7 +77,6 @@ export default function GeminiContentForgePage() {
 
   const [generatedArticle, setGeneratedArticle] = useState('');
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
-  const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [copyButtonText, setCopyButtonText] = useState("Copy Article");
   const [showRawOutput, setShowRawOutput] = useState(false);
 
@@ -85,7 +84,6 @@ export default function GeminiContentForgePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    setCurrentYear(new Date().getFullYear());
     const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
     const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
 
@@ -289,7 +287,7 @@ export default function GeminiContentForgePage() {
 
     setIsLoadingArticle(true);
     setGeneratedArticle('');
-    setShowRawOutput(false); // Reset raw view for new article
+    setShowRawOutput(false); 
 
     try {
       const input: GenerateArticleInput = {
@@ -308,10 +306,9 @@ export default function GeminiContentForgePage() {
         setGeneratedArticle(result.article);
         toast({ title: "Article Generated!", description: "Your content is ready." });
       } else if (result && result.article && result.article.trim() === "") {
-        // If AI returns an empty string, treat it as an empty response, but don't show previous error content.
         toast({ title: "Empty Response", description: "The AI returned an empty response. Try adjusting your inputs.", variant: "default" });
         setGeneratedArticle(''); 
-      } else { // This case covers if result or result.article is null/undefined
+      } else { 
         toast({ title: "Generation Issue", description: "The AI could not generate content. Try adjusting your inputs.", variant: "destructive" });
         setGeneratedArticle(''); 
       }
@@ -787,8 +784,17 @@ export default function GeminiContentForgePage() {
       </main>
 
       <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm">
-        {currentYear !== null && <p>&copy; {currentYear} Gemini Content Forge. All rights reserved.</p>}
-        <p>Powered by Generative AI.</p>
+        <p>
+          by{' '}
+          <a
+            href="https://github.com/TruongSinhAI"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            https://github.com/TruongSinhAI
+          </a>
+        </p>
       </footer>
     </div>
   );

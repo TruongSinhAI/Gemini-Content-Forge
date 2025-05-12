@@ -1,15 +1,15 @@
 'use server';
 /**
- * @fileOverview Generates an article based on user inputs, supporting various formats, languages, and optional integrated image generation.
+ * @fileOverview Generates an article based on user inputs, supporting various formats, languages, and integrated image generation.
  *
- * - generateArticle - A function for non-streaming article generation, potentially including an AI-generated image.
+ * - generateArticle - A function for non-streaming article generation, potentially including AI-generated images.
  * - GenerateArticleInput - The input type for the generateArticle function.
  * - GenerateArticleOutput - The output type for non-streaming generation.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { generateImage } from './generate-image'; // For integrated image generation
+import { generateImage } from './generate-image';
 
 // Schema for the input of the article generation
 const GenerateArticleInputSchema = z.object({
@@ -19,34 +19,33 @@ const GenerateArticleInputSchema = z.object({
   uploadedContent: z.string().optional().describe('Text content extracted from a user-uploaded document. This is prioritized as primary reference.'),
   additionalContext: z.string().optional().describe('Any additional textual context, description, or notes provided by the user.'),
   outputFormat: z.enum(['text', 'markdown', 'html']).describe("The desired output format: 'text', 'markdown', or 'html'."),
-  includeImage: z.boolean().optional().describe('Whether to generate and include an image in the article.'),
+  numberOfImages: z.number().int().min(0).max(5).optional().describe('Number of images to generate and embed (0-5).'),
 });
 export type GenerateArticleInput = z.infer<typeof GenerateArticleInputSchema>;
 
 // Schema for the output of the article generation (final output to client)
 const GenerateArticleOutputSchema = z.object({
-  article: z.string().describe('The generated article content, potentially including an embedded image.'),
+  article: z.string().describe('The generated article content, potentially including embedded images.'),
 });
 export type GenerateArticleOutput = z.infer<typeof GenerateArticleOutputSchema>;
 
 // Schema for the direct output from the LLM for article generation step
 const GenerateArticleLLMOutputSchema = z.object({
   articleContent: z.string().describe(
-    "The generated article content. If an image was requested and is to be included (includeImage=true), this content MUST include the exact placeholder string '{{IMAGE_PLACEHOLDER}}' at the single, most contextually appropriate location for an image. Otherwise, no placeholder."
+    "The generated article content. If images were requested (numberOfImages > 0), this content MUST include the exact placeholder strings like '{{IMAGE_PLACEHOLDER_0}}', '{{IMAGE_PLACEHOLDER_1}}', etc., at the most contextually appropriate locations for each image. The number of placeholders should match 'numberOfImages' if possible."
   ),
-  imagePromptSuggestion: z.string().optional().describe(
-    "If includeImage was true, this is a concise, descriptive prompt (max 20 words) for an image generation model that would visually complement the article at the placeholder's location. This field should only be present if an image was requested and a placeholder was included."
+  imagePromptSuggestions: z.array(z.string()).optional().describe(
+    "If images were requested, this is an array of concise, descriptive prompts (max 20 words each) for an image generation model. Each prompt corresponds to a placeholder (e.g., first prompt for {{IMAGE_PLACEHOLDER_0}}). The number of prompts should ideally match 'numberOfImages'."
   ),
 });
 
 const generateArticlePrompt = ai.definePrompt({
-  name: 'generateArticleWithOptionalImagePrompt',
+  name: 'generateArticleWithMultipleImagesPrompt',
   input: { schema: GenerateArticleInputSchema },
-  output: { schema: GenerateArticleLLMOutputSchema }, // LLM should output according to this schema
+  output: { schema: GenerateArticleLLMOutputSchema },
   prompt: `You are an AI assistant specializing in content generation and structuring. Your primary goal is to create a well-structured and coherent "{{contentType}}" based on the provided information.
 
-Output Format for Textual Content: {{outputFormat}}. Ensure the textual part of your output strictly adheres to this format. For example, if 'markdown' is requested, use Markdown syntax. If 'html' is requested, use valid, semantic HTML. If 'text' is requested, provide plain text.
-
+Output Format for Textual Content: {{outputFormat}}. Ensure the textual part of your output strictly adheres to this format.
 Target Language: {{language}}. Make sure the entire textual output is in this language.
 
 {{#if uploadedContent}}
@@ -64,35 +63,38 @@ Additional Context/Notes from User:
 {{/if}}
 
 Keywords/Topics to focus on: {{keywords}}
-
 Content Type to generate: {{contentType}}
 
-{{#if includeImage}}
-Image Integration Instructions:
+{{#if numberOfImages}}
+{{#if (gt numberOfImages 0)}}
+Image Integration Instructions (Generating {{numberOfImages}} image(s)):
 1.  First, generate the complete "{{contentType}}" as described by the user.
-2.  Within this generated textual content, identify ONE single, most contextually appropriate location for an image.
-3.  At this chosen location, you MUST insert the exact placeholder string: {{IMAGE_PLACEHOLDER}}
-    DO NOT add any other text, markdown, or HTML tags around this placeholder. Just the placeholder itself.
-4.  After determining the placeholder's location and generating the article text around it, create a concise and descriptive image generation prompt (max 20 words) that would visually complement the article content at the placeholder's location. This prompt will be used to generate an actual image.
-5.  The final textual article content you provide in 'articleContent' field must contain this '{{IMAGE_PLACEHOLDER}}'.
-6.  The 'imagePromptSuggestion' field should contain your generated image prompt.
+2.  Within this generated textual content, identify {{numberOfImages}} single, most contextually appropriate unique locations for images.
+3.  At each chosen location, you MUST insert a unique placeholder string: '{{IMAGE_PLACEHOLDER_0}}' for the first image, '{{IMAGE_PLACEHOLDER_1}}' for the second, and so on, up to '{{IMAGE_PLACEHOLDER_{{subtract numberOfImages 1}}}}'.
+    DO NOT add any other text, markdown, or HTML tags around these placeholders. Just the placeholder itself.
+4.  After determining placeholder locations and generating the article text, create an array of {{numberOfImages}} concise and descriptive image generation prompts (max 20 words each). Each prompt in the 'imagePromptSuggestions' array should correspond to its placeholder (e.g., the first prompt for '{{IMAGE_PLACEHOLDER_0}}').
+5.  The final textual article content you provide in the 'articleContent' field must contain these '{{IMAGE_PLACEHOLDER_X}}' strings.
+6.  The 'imagePromptSuggestions' field should contain your array of generated image prompts. If you can't find a suitable place or prompt for some images, provide fewer prompts than {{numberOfImages}}, but ensure placeholders match the number of prompts.
 
-Example for "includeImage: true": If generating a blog post about "baking apple pie" and you decide an image of the finished pie is best after the introduction, your 'articleContent' might be:
-"Baking an apple pie is a delightful experience... {{IMAGE_PLACEHOLDER}} Now, let's get to the ingredients..."
-And 'imagePromptSuggestion' could be: "A golden-brown baked apple pie cooling on a rustic table."
+Example for "numberOfImages: 2":
+'articleContent': "Intro text... {{IMAGE_PLACEHOLDER_0}} More text... {{IMAGE_PLACEHOLDER_1}} Conclusion."
+'imagePromptSuggestions': ["A photo of concept A", "An illustration of concept B"]
 {{else}}
 Image Integration Instructions:
-No image is requested. Generate only the textual content. Do not include any image placeholders or image prompt suggestions. The 'imagePromptSuggestion' field should be omitted or empty.
+No images are requested (numberOfImages is 0). Generate only the textual content. Do not include any image placeholders or image prompt suggestions.
+{{/if}}
+{{else}}
+Image Integration Instructions:
+No images are requested. Generate only the textual content. Do not include any image placeholders or image prompt suggestions.
 {{/if}}
 
 General Instructions for Textual Content:
-1.  If a user-uploaded document is provided, use it as the main foundation for the article. Prioritize this content.
-2.  If additional context is provided, incorporate it intelligently to enhance the article.
-3.  Ensure the final article is logical, easy to understand, and directly addresses the specified keywords and content type.
-4.  Generate the entire article STRICTLY in the "Target Language" and "Output Format" specified. Do not mix languages or formats.
-5.  For 'markdown' or 'html' formats, ensure the output is well-formed and complete.
+1.  Prioritize user-uploaded document content if provided.
+2.  Incorporate additional context intelligently.
+3.  Ensure the final article is logical, addresses keywords and content type.
+4.  Generate STRICTLY in the "Target Language" and "Output Format".
 
-Respond with a JSON object matching the defined output schema (articleContent, imagePromptSuggestion).`,
+Respond with a JSON object matching the defined output schema (articleContent, imagePromptSuggestions).`,
 });
 
 
@@ -100,10 +102,9 @@ const generateArticleFlow = ai.defineFlow(
   {
     name: 'generateArticleFlow',
     inputSchema: GenerateArticleInputSchema,
-    outputSchema: GenerateArticleOutputSchema, // Final output to client
+    outputSchema: GenerateArticleOutputSchema,
   },
   async (input) => {
-    // Call the LLM to get article content (potentially with placeholder) and an image prompt suggestion
     const llmResponse = await generateArticlePrompt(input);
     
     if (!llmResponse.output || typeof llmResponse.output.articleContent !== 'string') {
@@ -111,49 +112,79 @@ const generateArticleFlow = ai.defineFlow(
     }
 
     let finalArticleContent = llmResponse.output.articleContent;
-    const imagePromptSuggestion = llmResponse.output.imagePromptSuggestion;
+    const imagePromptSuggestions = llmResponse.output.imagePromptSuggestions || [];
+    
+    const numImagesToProcess = Math.min(input.numberOfImages || 0, imagePromptSuggestions.length);
 
-    if (input.includeImage && imagePromptSuggestion && imagePromptSuggestion.trim() !== "" && finalArticleContent.includes('{{IMAGE_PLACEHOLDER}}')) {
-      try {
-        const imageResult = await generateImage({ prompt: imagePromptSuggestion });
-        
-        // Ensure imageDataUri is a valid, non-empty, non-whitespace string
-        if (imageResult && imageResult.imageDataUri && imageResult.imageDataUri.trim() !== "") {
-          let imageEmbedCode = '';
-          const altText = imagePromptSuggestion || `Generated image for ${input.contentType}`;
+    if (numImagesToProcess > 0) {
+      for (let i = 0; i < numImagesToProcess; i++) {
+        const placeholder = `{{IMAGE_PLACEHOLDER_${i}}}`;
+        const promptText = imagePromptSuggestions[i];
 
-          switch (input.outputFormat) {
-            case 'html':
-              imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageResult.imageDataUri.trim()}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`;
-              break;
-            case 'markdown':
-              imageEmbedCode = `\n\n![${altText}](${imageResult.imageDataUri.trim()})\n\n`;
-              break;
-            case 'text':
-              imageEmbedCode = `\n\n[An AI-generated image was created for this section based on the prompt: "${imagePromptSuggestion}". In HTML/Markdown formats, this image would be displayed here.]\n\n`;
-              break;
+        if (!promptText || promptText.trim() === "") {
+          // If prompt is empty, replace placeholder with a note
+          const noPromptMessage = `[Image placeholder ${i} had no associated prompt.]`;
+          if (input.outputFormat === 'text') {
+            finalArticleContent = finalArticleContent.replace(placeholder, `\n${noPromptMessage}\n`);
+          } else {
+            finalArticleContent = finalArticleContent.replace(placeholder, `\n\n*${noPromptMessage}*\n\n`);
           }
-          finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', imageEmbedCode);
-        } else {
-            // If image generation failed or returned no URI / empty or whitespace URI, remove placeholder or add a note
-            finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', 
-                input.outputFormat === 'text' 
-                ? '\n[Image generation was attempted but failed or did not produce a valid image.]\n' 
-                : ''); // For markdown/html, just remove placeholder
+          continue; 
         }
-      } catch (imageError) {
-        console.error('Error generating or embedding image:', imageError);
-        const errorMsg = imageError instanceof Error ? imageError.message : "Unknown error during image generation";
-        finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', 
-            input.outputFormat === 'text' 
-            ? `\n[Image generation failed: ${errorMsg}]\n` 
-            : ''); // For markdown/html, just remove placeholder
+
+        try {
+          const imageResult = await generateImage({ prompt: promptText });
+          const imageDataUri = imageResult?.imageDataUri;
+
+          if (imageDataUri && imageDataUri.trim() !== "" && imageDataUri.startsWith('data:image')) {
+            let imageEmbedCode = '';
+            const altText = promptText || `Generated image ${i + 1} for ${input.contentType}`;
+
+            switch (input.outputFormat) {
+              case 'html':
+                imageEmbedCode = `<div style="margin: 1.5em 0; text-align: center;"><img src="${imageDataUri.trim()}" alt="${altText}" style="max-width: 100%; height: auto; border-radius: 0.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></div>`;
+                break;
+              case 'markdown':
+                imageEmbedCode = `\n\n![${altText}](${imageDataUri.trim()})\n\n`;
+                break;
+              case 'text':
+                imageEmbedCode = `\n\n[AI-generated image for: "${promptText}". In HTML/Markdown, this image would be displayed here.]\n\n`;
+                break;
+            }
+            finalArticleContent = finalArticleContent.replace(placeholder, imageEmbedCode);
+          } else {
+            // Image generation failed or returned invalid URI
+            const failureMessage = `[Image for prompt "${promptText}" could not be generated or was invalid.]`;
+            if (input.outputFormat === 'text') {
+              finalArticleContent = finalArticleContent.replace(placeholder, `\n${failureMessage}\n`);
+            } else { // For MD/HTML
+              finalArticleContent = finalArticleContent.replace(placeholder, `\n\n*${failureMessage}*\n\n`);
+            }
+          }
+        } catch (imageError: any) {
+          console.error(`Error generating or embedding image ${i} for prompt "${promptText}":`, imageError);
+          const errorMsg = imageError instanceof Error ? imageError.message : "Unknown error";
+          const failureMessage = `[Image generation failed for prompt "${promptText}": ${errorMsg}]`;
+          if (input.outputFormat === 'text') {
+            finalArticleContent = finalArticleContent.replace(placeholder, `\n${failureMessage}\n`);
+          } else { // For MD/HTML
+            finalArticleContent = finalArticleContent.replace(placeholder, `\n\n*${failureMessage}*\n\n`);
+          }
+        }
       }
-    } else {
-        // If no image was requested, or no prompt/placeholder, ensure placeholder is removed if it somehow exists
-        finalArticleContent = finalArticleContent.replace('{{IMAGE_PLACEHOLDER}}', '');
     }
 
+    // Fallback for any placeholders that were not specifically processed or if LLM hallucinated extra ones
+    const placeholderRegex = /{{IMAGE_PLACEHOLDER_\d+}}/g;
+    if (finalArticleContent.match(placeholderRegex)) {
+        const missedPlaceholderMessage = `[An AI-generated image placeholder was present but not filled.]`;
+        if (input.outputFormat === 'text') {
+            finalArticleContent = finalArticleContent.replace(placeholderRegex, `\n${missedPlaceholderMessage}\n`);
+        } else { // For MD/HTML
+            finalArticleContent = finalArticleContent.replace(placeholderRegex, `\n\n*${missedPlaceholderMessage}*\n\n`);
+        }
+    }
+    
     return { article: finalArticleContent };
   }
 );

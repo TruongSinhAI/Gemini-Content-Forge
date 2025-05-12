@@ -1,24 +1,21 @@
-
-
 "use client";
 
 import { useState, type ChangeEvent, useEffect } from 'react';
-import Image from 'next/image'; // Import next/image
+import Image from 'next/image'; 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, Image as ImageIconLucide } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, LanguagesIcon, Palette, X, ImageIcon as ImageIconLucide, Copy, Download, Code, Eye } from "lucide-react"; // Added Code, Eye
 import { generateArticle, type GenerateArticleInput, type GenerateArticleOutput } from '@/ai/flows/generate-article-flow';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
 import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
-// Removed: import { generateImage, type GenerateImageInput, type GenerateImageOutput } from '@/ai/flows/generate-image';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
+
 import * as pdfjsLib from 'pdfjs-dist';
 import * as XLSX from 'xlsx';
 import ReactMarkdown from 'react-markdown';
@@ -68,22 +65,20 @@ export default function GeminiContentForgePage() {
 
   const [keywords, setKeywords] = useState('');
   const [description, setDescription] = useState(''); 
-  const [customContentType, setCustomContentType] = useState<string>('');
+  const [customContentType, setCustomContentType] = useState<string>('blog post');
   const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(supportedLanguages[0].value);
-  const [selectedOutputFormat, setSelectedOutputFormat] = useState<OutputFormatOption['value']>(outputFormatOptions[0].value);
+  const [selectedOutputFormat, setSelectedOutputFormat] = useState<OutputFormatOption['value']>(outputFormatOptions[1].value); 
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [includeImageInArticle, setIncludeImageInArticle] = useState(false); // State for including image
   
+  const [numberOfImages, setNumberOfImages] = useState<number>(1); 
+
   const [generatedArticle, setGeneratedArticle] = useState('');
   const [isLoadingArticle, setIsLoadingArticle] = useState(false);
   const [currentYear, setCurrentYear] = useState<number | null>(null);
-
-  // Removed image generation specific states:
-  // const [imagePrompt, setImagePrompt] = useState('');
-  // const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
-  // const [isLoadingImage, setIsLoadingImage] = useState(false);
+  const [copyButtonText, setCopyButtonText] = useState("Copy Article");
+  const [showRawOutput, setShowRawOutput] = useState(false);
 
 
   const { toast } = useToast();
@@ -100,6 +95,12 @@ export default function GeminiContentForgePage() {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
   }, []);
+
+  useEffect(() => {
+    if (selectedOutputFormat === 'text') {
+      setShowRawOutput(false); 
+    }
+  }, [selectedOutputFormat]);
 
 
   const handleSuggestTopics = async () => {
@@ -182,8 +183,8 @@ export default function GeminiContentForgePage() {
         "text/plain",
         "text/markdown",
         "application/pdf",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-        "application/vnd.ms-excel" // .xls
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        "application/vnd.ms-excel" 
       ];
       const allowedExtensions = [".txt", ".md", ".pdf", ".xlsx", ".xls"];
 
@@ -279,9 +280,15 @@ export default function GeminiContentForgePage() {
       toast({ title: "Input Required", description: "Please select an output format.", variant: "destructive" });
       return;
     }
+    if (numberOfImages < 0 || numberOfImages > 5) {
+        toast({ title: "Invalid Input", description: "Number of images must be between 0 and 5.", variant: "destructive" });
+        return;
+    }
+
 
     setIsLoadingArticle(true);
     setGeneratedArticle('');
+    setShowRawOutput(false); // Reset raw view for new article
 
     try {
       const input: GenerateArticleInput = {
@@ -291,7 +298,7 @@ export default function GeminiContentForgePage() {
         uploadedContent: uploadedFileContent || undefined,
         additionalContext: description || undefined,
         outputFormat: selectedOutputFormat,
-        includeImage: includeImageInArticle, // Pass the checkbox state
+        numberOfImages: numberOfImages,
       };
 
       const result: GenerateArticleOutput = await generateArticle(input);
@@ -299,22 +306,68 @@ export default function GeminiContentForgePage() {
       if (result && result.article && result.article.trim()) {
         setGeneratedArticle(result.article);
         toast({ title: "Article Generated!", description: "Your content is ready." });
-      } else {
-        toast({ title: "Empty Response", description: "The AI returned an empty response. Try adjusting your inputs.", variant: "destructive" });
-        setGeneratedArticle(''); // Ensure it's cleared
+      } else if (result && result.article && result.article.trim() === "") {
+        // If AI returns an empty string, treat it as an empty response, but don't show previous error content.
+        toast({ title: "Empty Response", description: "The AI returned an empty response. Try adjusting your inputs.", variant: "default" });
+        setGeneratedArticle(''); 
+      } else { // This case covers if result or result.article is null/undefined
+        toast({ title: "Generation Issue", description: "The AI could not generate content. Try adjusting your inputs.", variant: "destructive" });
+        setGeneratedArticle(''); 
       }
 
     } catch (error: any) {
       console.error("Error generating article:", error);
       const errorMessage = error.message || "Failed to generate article. Please try again.";
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
-      setGeneratedArticle(`--- ERROR ---\n${errorMessage}`); // Display error in output area
+      setGeneratedArticle(`--- ERROR ---\n${errorMessage}`); 
     } finally {
       setIsLoadingArticle(false);
     }
   };
 
-  // Removed handleGenerateImage function
+  const handleCopyArticle = async () => {
+    if (!generatedArticle) return;
+    try {
+      await navigator.clipboard.writeText(generatedArticle);
+      setCopyButtonText("Copied!");
+      toast({ title: "Copied!", description: "Article content copied to clipboard." });
+      setTimeout(() => setCopyButtonText("Copy Article"), 2000);
+    } catch (err) {
+      console.error('Failed to copy article: ', err);
+      toast({ title: "Copy Failed", description: "Could not copy article to clipboard.", variant: "destructive" });
+    }
+  };
+
+  const handleDownloadArticle = () => {
+    if (!generatedArticle) return;
+
+    let mimeType = "text/plain";
+    let fileExtension = ".txt";
+
+    switch (selectedOutputFormat) {
+      case "markdown":
+        mimeType = "text/markdown;charset=utf-8";
+        fileExtension = ".md";
+        break;
+      case "html":
+        mimeType = "text/html;charset=utf-8";
+        fileExtension = ".html";
+        break;
+    }
+
+    const blob = new Blob([generatedArticle], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const contentTypeSlug = customContentType.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'generated';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.download = `${contentTypeSlug}-article-${timestamp}${fileExtension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Download Started", description: `Article downloaded as ${a.download}.` });
+  };
 
 
   return (
@@ -326,343 +379,390 @@ export default function GeminiContentForgePage() {
         </p>
       </header>
 
-      <main className="w-full max-w-3xl space-y-8">
-        {/* Section 1: Topic Suggester */}
-        <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-          <div className="p-6 bg-muted/30 border-b border-border">
-            <div className="flex items-center gap-3 mb-1">
-              <Lightbulb className="text-accent w-7 h-7" />
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">Topic & Keyword Suggester</h2>
-            </div>
-            <p className="text-sm text-muted-foreground ml-10">
-              Get inspiration! Enter an idea to discover related topics and keywords.
-            </p>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="topic-idea">Your Initial Idea</Label>
-                <Input 
-                  id="topic-idea" 
-                  placeholder="e.g., sustainable gardening, AI in healthcare" 
-                  value={topicIdea} 
-                  onChange={(e) => setTopicIdea(e.target.value)} 
-                />
-              </div>
-              <Button onClick={handleSuggestTopics} disabled={isLoadingTopics} className="w-full sm:w-auto">
-                {isLoadingTopics ? <Loader2 className="animate-spin mr-2" /> : <Lightbulb className="mr-2 h-4 w-4" />}
-                Suggest Topics
-              </Button>
-              {suggestedTopicsList.length > 0 && (
-                <div className="mt-4 space-y-2 pt-4 border-t">
-                  <h3 className="font-semibold text-foreground">Suggested Topics:</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestedTopicsList.map((topic, index) => (
-                      <Button 
-                        key={index} 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleAddTopicToKeywords(topic)}
-                        className="bg-accent/10 hover:bg-accent/20 text-accent border-accent/30 rounded-full"
-                      >
-                        {topic}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Section 2: Web Search */}
-        <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-          <div className="p-6 bg-muted/30 border-b border-border">
-            <div className="flex items-center gap-3 mb-1">
-              <Search className="text-accent w-7 h-7" />
-              <h2 className="text-2xl font-semibold leading-none tracking-tight">Real-time Web Search</h2>
-            </div>
-            <p className="text-sm text-muted-foreground ml-10">
-              Find up-to-date information from Google to enrich your content. Fetched content is AI-extracted.
-            </p>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {searchApiWarning && (
-                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-start gap-2">
-                      <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                      <p>{searchApiWarning} Ensure GOOGLE_API_KEY and CUSTOM_SEARCH_ENGINE_ID in .env start with NEXT_PUBLIC_.</p>
-                  </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="google-search-query">Search Query</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    id="google-search-query" 
-                    placeholder="e.g., latest AI advancements, climate change impact 2024" 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                  />
-                  <Button onClick={handleSearchGoogle} disabled={isLoadingSearch} aria-label="Search Google">
-                    {isLoadingSearch ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              {searchResults.length > 0 && (
-                <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto">
-                  <h3 className="font-semibold text-foreground">Search Results:</h3>
-                  <Accordion type="multiple" className="w-full">
-                    {searchResults.map((result, index) => (
-                      <AccordionItem value={`item-${index}`} key={index} className="bg-card hover:bg-muted/10 transition-colors shadow-sm rounded-lg mb-2 border overflow-hidden">
-                        <AccordionTrigger className="p-4 hover:no-underline w-full text-left">
-                            <div className="flex-1 space-y-1">
-                              <h4 className="font-medium text-primary text-base">{result.title}</h4>
-                              <p className="text-sm text-muted-foreground text-ellipsis overflow-hidden line-clamp-2">{result.snippet}</p>
-                              <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1 pt-1">
-                                  <LinkIcon className="w-3 h-3" /> Visit Source
-                              </a>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4">
-                          <div className="border-t pt-3 mt-2">
-                            {result.fetchedContent && (
-                              <div className="mb-3">
-                                <h5 className="text-sm font-semibold text-foreground/80 mb-1">AI Extracted Content:</h5>
-                                <p className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto bg-muted/20 p-2.5 rounded-md border">
-                                  {result.fetchedContent}
-                                </p>
-                              </div>
-                            )}
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleAddSnippetToDescription(result.snippet, result.title, result.fetchedContent)}
-                                className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1 w-full justify-start text-xs"
-                            >
-                                <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add Snippet & Extracted Content to Context
-                            </Button>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-        
-        {/* Section 3: Content Generation Setup */}
-        <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="bg-muted/30 p-6">
-            <div className="flex items-center gap-3 mb-1">
-                <Settings2 className="text-accent w-7 h-7" />
-                <CardTitle className="text-2xl">Content Generation Setup</CardTitle>
-            </div>
-            <CardDescription className="ml-10">
-              Provide details below to generate your unique content.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="keywords" className="flex items-center gap-1.5">
-                  <Tags className="w-4 h-4 text-muted-foreground" />
-                  Keywords / Topics
-                </Label>
-                <Input 
-                  id="keywords" 
-                  placeholder="e.g., digital marketing trends, healthy breakfast recipes" 
-                  value={keywords} 
-                  onChange={(e) => setKeywords(e.target.value)} 
-                />
-                <p className="text-xs text-muted-foreground">Comma-separated keywords or topics that define your content.</p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="file-upload-input" className="flex items-center gap-1.5">
-                  <UploadCloud className="w-4 h-4 text-muted-foreground" />
-                  Upload Document (Optional, .txt, .md, .pdf, .xlsx, .xls)
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                      variant="outline"
-                      onClick={() => document.getElementById('file-upload-input')?.click()}
-                      disabled={isProcessingFile}
-                      className={cn(
-                        "w-full justify-start text-left font-normal hover:bg-muted/50",
-                        uploadedFileName && "border-primary text-primary hover:border-primary/70",
-                        !uploadedFileName && "text-muted-foreground" 
-                      )}
-                  >
-                    {isProcessingFile ? (
-                      <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                    ) : (
-                      <FileUp className="mr-2 h-4 w-4" />
-                    )}
-                    {uploadedFileName || "Choose a file..."}
-                  </Button>
-                  <Input 
-                    id="file-upload-input" 
-                    type="file" 
-                    accept=".txt,.md,.pdf,.xlsx,.xls,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                    onChange={handleFileUpload} 
-                    className="hidden" 
-                    disabled={isProcessingFile}
-                  />
-                  {uploadedFileContent && (
-                    <Button variant="ghost" size="icon" onClick={() => {setUploadedFileContent(null); setUploadedFileName(null);}} className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 w-9" aria-label="Clear uploaded file">
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                {uploadedFileName && <p className="text-xs text-primary mt-1">Using: {uploadedFileName}</p>}
-                {!uploadedFileName && <p className="text-xs text-muted-foreground mt-1">Upload a text, Markdown, PDF, or Excel file to use as primary reference.</p>}
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="description" className="flex items-center gap-1.5">
-                  <BookText className="w-4 h-4 text-muted-foreground" />
-                  Additional Context / Description (Optional)
-                </Label>
-                <Textarea 
-                  id="description" 
-                  placeholder="e.g., An article for beginners about starting an online store. Or, paste snippets from search results here."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground">A short description, specific points, or search snippets to include.</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="custom-content-type" className="flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    Custom Content Type
-                  </Label>
-                  <Input 
-                    id="custom-content-type" 
-                    placeholder="e.g., blog post, technical summary" 
-                    value={customContentType} 
-                    onChange={(e) => setCustomContentType(e.target.value)} 
-                  />
-                  <p className="text-xs text-muted-foreground">Specify type (e.g., email, poem).</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="output-format-select" className="flex items-center gap-1.5">
-                    <Palette className="w-4 h-4 text-muted-foreground" />
-                    Output Format
-                  </Label>
-                  <Select onValueChange={(value: OutputFormatOption['value']) => setSelectedOutputFormat(value)} value={selectedOutputFormat}>
-                    <SelectTrigger id="output-format-select" className="w-full">
-                      <SelectValue placeholder="Select format" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {outputFormatOptions.map(format => (
-                        <SelectItem key={format.value} value={format.value}>
-                          {format.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Choose Text, Markdown, or HTML.</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="language-select" className="flex items-center gap-1.5">
-                  <LanguagesIcon className="w-4 h-4 text-muted-foreground" />
-                  Output Language
-                </Label>
-                <Select onValueChange={(value: string) => setSelectedLanguage(value)} value={selectedLanguage}>
-                  <SelectTrigger id="language-select" className="w-full">
-                    <SelectValue placeholder="Select language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {supportedLanguages.map(lang => (
-                      <SelectItem key={lang.value} value={lang.value}>
-                        {lang.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Choose the language for the generated content.</p>
-              </div>
-
-              <div className="flex items-center space-x-2 pt-2">
-                <Checkbox 
-                  id="include-image" 
-                  checked={includeImageInArticle} 
-                  onCheckedChange={(checked) => setIncludeImageInArticle(Boolean(checked))}
-                />
-                <Label htmlFor="include-image" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-1.5">
-                 <ImageIconLucide className="w-4 h-4 text-muted-foreground" /> Include AI-generated image in article
-                </Label>
-              </div>
-              <p className="text-xs text-muted-foreground -mt-2 ml-8">If checked, an AI will attempt to generate and embed a relevant image.</p>
-
-            </div>
-          </CardContent>
-          <CardFooter className="p-6 bg-muted/30 border-t border-border">
-            <Button onClick={handleGenerateArticle} disabled={isLoadingArticle || isProcessingFile} size="lg" className="w-full">
-              {(isLoadingArticle || isProcessingFile) ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
-              Generate Article
-            </Button>
-          </CardFooter>
-        </Card>
-
-         {/* Removed Image Generation Section */}
-        
-        { (isLoadingArticle || generatedArticle) && (
-          <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
-            <CardHeader className="bg-muted/30 p-6">
+      <main className="w-full max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Inputs & Tools */}
+        <div className="lg:col-span-1 space-y-8">
+            {/* Section 1: Topic Suggester */}
+            <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div className="p-6 bg-card border-b border-border">
                 <div className="flex items-center gap-3 mb-1">
-                    <FileText className="text-accent w-7 h-7" />
-                    <CardTitle className="text-2xl">Generated Article</CardTitle>
+                <Lightbulb className="text-accent w-7 h-7" />
+                <h2 className="text-xl font-semibold leading-none tracking-tight text-foreground">Topic Suggester</h2>
                 </div>
-              <CardDescription className="ml-10">
-                Review and edit your AI-generated content below. Images may be embedded if requested.
-              </CardDescription>
+                <p className="text-xs text-muted-foreground ml-10">
+                Get inspiration! Enter an idea.
+                </p>
+            </div>
+            <div className="p-6">
+                <div className="space-y-4">
+                <div className="space-y-1.5">
+                    <Label htmlFor="topic-idea" className="text-sm">Your Initial Idea</Label>
+                    <Input 
+                    id="topic-idea" 
+                    placeholder="e.g., sustainable gardening" 
+                    value={topicIdea} 
+                    onChange={(e) => setTopicIdea(e.target.value)} 
+                    />
+                </div>
+                <Button onClick={handleSuggestTopics} disabled={isLoadingTopics} className="w-full">
+                    {isLoadingTopics ? <Loader2 className="animate-spin mr-2" /> : <Lightbulb className="mr-2 h-4 w-4" />}
+                    Suggest Topics
+                </Button>
+                {suggestedTopicsList.length > 0 && (
+                    <div className="mt-3 space-y-1.5 pt-3 border-t">
+                    <h3 className="font-medium text-sm text-foreground">Suggestions:</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                        {suggestedTopicsList.map((topic, index) => (
+                        <Button 
+                            key={index} 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleAddTopicToKeywords(topic)}
+                            className="bg-accent/10 hover:bg-accent/20 text-accent-foreground border-accent/30 rounded-full text-xs px-2.5 py-1"
+                        >
+                            {topic}
+                        </Button>
+                        ))}
+                    </div>
+                    </div>
+                )}
+                </div>
+            </div>
+            </Card>
+
+            {/* Section 2: Web Search */}
+            <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <div className="p-6 bg-card border-b border-border">
+                <div className="flex items-center gap-3 mb-1">
+                <Search className="text-accent w-7 h-7" />
+                <h2 className="text-xl font-semibold leading-none tracking-tight text-foreground">Web Search</h2>
+                </div>
+                <p className="text-xs text-muted-foreground ml-10">
+                Find up-to-date info from Google.
+                </p>
+            </div>
+            <div className="p-6">
+                <div className="space-y-4">
+                {searchApiWarning && (
+                    <div className="p-2.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-start gap-1.5">
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-px" />
+                        <p>{searchApiWarning}</p>
+                    </div>
+                )}
+                <div className="space-y-1.5">
+                    <Label htmlFor="google-search-query" className="text-sm">Search Query</Label>
+                    <div className="flex gap-2">
+                    <Input 
+                        id="google-search-query" 
+                        placeholder="e.g., latest AI advancements" 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                    />
+                    <Button onClick={handleSearchGoogle} disabled={isLoadingSearch} aria-label="Search Google" size="icon" className="w-10 h-10 flex-shrink-0">
+                        {isLoadingSearch ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
+                    </Button>
+                    </div>
+                </div>
+                {searchResults.length > 0 && (
+                    <div className="mt-3 space-y-2.5 pt-3 border-t max-h-[20rem] overflow-y-auto">
+                    <h3 className="font-medium text-sm text-foreground">Search Results:</h3>
+                    <Accordion type="multiple" className="w-full">
+                        {searchResults.map((result, index) => (
+                        <AccordionItem value={`item-${index}`} key={index} className="bg-background hover:bg-muted/20 transition-colors shadow-sm rounded-lg mb-1.5 border overflow-hidden">
+                            <AccordionTrigger className="p-3 hover:no-underline w-full text-left text-xs">
+                                <div className="flex-1 space-y-0.5">
+                                <h4 className="font-medium text-primary">{result.title}</h4>
+                                <p className="text-muted-foreground text-ellipsis overflow-hidden line-clamp-2">{result.snippet}</p>
+                                <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1 pt-0.5 text-xs">
+                                    <LinkIcon className="w-3 h-3" /> Visit Source
+                                </a>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-3 pb-3">
+                            <div className="border-t pt-2 mt-1.5">
+                                {result.fetchedContent && (
+                                <div className="mb-2">
+                                    <h5 className="text-xs font-semibold text-foreground/80 mb-1">AI Extracted Content:</h5>
+                                    <p className="text-xs text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto bg-muted/30 p-2 rounded-md border">
+                                    {result.fetchedContent}
+                                    </p>
+                                </div>
+                                )}
+                                <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => handleAddSnippetToDescription(result.snippet, result.title, result.fetchedContent)}
+                                    className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1 w-full justify-start text-xs h-auto"
+                                >
+                                    <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add to Context
+                                </Button>
+                            </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                        ))}
+                    </Accordion>
+                    </div>
+                )}
+                </div>
+            </div>
+            </Card>
+        </div>
+
+        {/* Right Column: Content Generation & Output */}
+        <div className="lg:col-span-2 space-y-8">
+            {/* Section 3: Content Generation Setup */}
+            <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+            <CardHeader className="bg-card p-6 border-b">
+                <div className="flex items-center gap-3 mb-1">
+                    <Settings2 className="text-accent w-7 h-7" />
+                    <CardTitle className="text-xl text-foreground">Content Generation Setup</CardTitle>
+                </div>
+                <CardDescription className="ml-10 text-xs">
+                Provide details to generate your unique content.
+                </CardDescription>
             </CardHeader>
             <CardContent className="p-6">
-              {isLoadingArticle && !generatedArticle && (
-                 <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-lg p-8 bg-card">
-                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                    <p className="mt-4 text-lg text-muted-foreground">Crafting your content...</p>
-                    <p className="text-sm text-muted-foreground">This might take a few moments as the AI writes.</p>
-                 </div>
-              )}
-              {generatedArticle && ( 
-                <div className="generated-content-output-area min-h-[200px]">
-                  {selectedOutputFormat === 'text' && (
-                    <Textarea 
-                      value={generatedArticle}
-                      onChange={(e) => setGeneratedArticle(e.target.value)}
-                      rows={18}
-                      className="text-base leading-relaxed border-input focus:border-primary bg-background p-4 rounded-md shadow-inner w-full h-auto min-h-[400px]"
-                      placeholder="Your generated article will appear here."
-                      aria-label="Generated article content"
-                      readOnly={isLoadingArticle} 
+                <div className="space-y-5">
+                <div className="space-y-1.5">
+                    <Label htmlFor="keywords" className="flex items-center gap-1.5 text-sm">
+                    <Tags className="w-4 h-4 text-muted-foreground" />
+                    Keywords / Topics
+                    </Label>
+                    <Input 
+                    id="keywords" 
+                    placeholder="e.g., digital marketing trends, healthy breakfast recipes" 
+                    value={keywords} 
+                    onChange={(e) => setKeywords(e.target.value)} 
                     />
-                  )}
-                  {selectedOutputFormat === 'markdown' && (
-                    <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{generatedArticle}</ReactMarkdown>
-                    </div>
-                  )}
-                  {selectedOutputFormat === 'html' && (
-                    <div 
-                      className="p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none"
-                      dangerouslySetInnerHTML={{ __html: generatedArticle }} 
-                    />
-                  )}
+                    <p className="text-xs text-muted-foreground">Comma-separated keywords or topics.</p>
                 </div>
-              )}
+                
+                <div className="space-y-1.5">
+                    <Label htmlFor="file-upload-input" className="flex items-center gap-1.5 text-sm">
+                    <UploadCloud className="w-4 h-4 text-muted-foreground" />
+                    Upload Document (Optional)
+                    </Label>
+                    <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => document.getElementById('file-upload-input')?.click()}
+                        disabled={isProcessingFile}
+                        className={cn(
+                            "w-full justify-start text-left font-normal hover:bg-muted/50 text-sm",
+                            uploadedFileName && "border-primary text-primary hover:border-primary/70",
+                            !uploadedFileName && "text-muted-foreground" 
+                        )}
+                    >
+                        {isProcessingFile ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                        ) : (
+                        <FileUp className="mr-2 h-4 w-4" />
+                        )}
+                        {uploadedFileName || "Choose .txt, .md, .pdf, .xlsx, .xls..."}
+                    </Button>
+                    <Input 
+                        id="file-upload-input" 
+                        type="file" 
+                        accept=".txt,.md,.pdf,.xlsx,.xls,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        onChange={handleFileUpload} 
+                        className="hidden" 
+                        disabled={isProcessingFile}
+                    />
+                    {uploadedFileContent && (
+                        <Button variant="ghost" size="icon" onClick={() => {setUploadedFileContent(null); setUploadedFileName(null);}} className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 w-9 flex-shrink-0" aria-label="Clear uploaded file">
+                        <X className="h-4 w-4" />
+                        </Button>
+                    )}
+                    </div>
+                    {uploadedFileName && <p className="text-xs text-primary mt-1">Using: {uploadedFileName}</p>}
+                    {!uploadedFileName && <p className="text-xs text-muted-foreground mt-1">Upload reference material.</p>}
+                </div>
+                
+                <div className="space-y-1.5">
+                    <Label htmlFor="description" className="flex items-center gap-1.5 text-sm">
+                    <BookText className="w-4 h-4 text-muted-foreground" />
+                    Additional Context (Optional)
+                    </Label>
+                    <Textarea 
+                    id="description" 
+                    placeholder="e.g., An article for beginners. Or, paste search snippets here."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    />
+                    <p className="text-xs text-muted-foreground">Notes, description, or search snippets.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                    <Label htmlFor="custom-content-type" className="flex items-center gap-1.5 text-sm">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        Content Type
+                    </Label>
+                    <Input 
+                        id="custom-content-type" 
+                        placeholder="e.g., blog post, email" 
+                        value={customContentType} 
+                        onChange={(e) => setCustomContentType(e.target.value)} 
+                    />
+                    <p className="text-xs text-muted-foreground">Specify type (e.g., poem).</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                    <Label htmlFor="output-format-select" className="flex items-center gap-1.5 text-sm">
+                        <Palette className="w-4 h-4 text-muted-foreground" />
+                        Output Format
+                    </Label>
+                    <Select onValueChange={(value: OutputFormatOption['value']) => setSelectedOutputFormat(value)} value={selectedOutputFormat}>
+                        <SelectTrigger id="output-format-select" className="w-full">
+                        <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {outputFormatOptions.map(format => (
+                            <SelectItem key={format.value} value={format.value}>
+                            {format.label}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Choose Text, Markdown, or HTML.</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="language-select" className="flex items-center gap-1.5 text-sm">
+                        <LanguagesIcon className="w-4 h-4 text-muted-foreground" />
+                        Output Language
+                        </Label>
+                        <Select onValueChange={(value: string) => setSelectedLanguage(value)} value={selectedLanguage}>
+                        <SelectTrigger id="language-select" className="w-full">
+                            <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {supportedLanguages.map(lang => (
+                            <SelectItem key={lang.value} value={lang.value}>
+                                {lang.label}
+                            </SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Choose target language.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="number-of-images" className="flex items-center gap-1.5 text-sm">
+                            <ImageIconLucide className="w-4 h-4 text-muted-foreground" />
+                            Number of Images (0-5)
+                        </Label>
+                        <Input
+                            id="number-of-images"
+                            type="number"
+                            min="0"
+                            max="5"
+                            value={numberOfImages}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!isNaN(val)) {
+                                    setNumberOfImages(Math.max(0, Math.min(5, val)))
+                                } else if (e.target.value === '') {
+                                    setNumberOfImages(0); // Or handle as preferred, e.g. keep previous valid value
+                                }
+                            }}
+                            className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">AI will embed relevant images.</p>
+                    </div>
+                </div>
+                </div>
             </CardContent>
-          </Card>
-        )}
+            <CardFooter className="p-6 bg-muted/10 border-t">
+                <Button onClick={handleGenerateArticle} disabled={isLoadingArticle || isProcessingFile} size="lg" className="w-full">
+                {(isLoadingArticle || isProcessingFile) ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
+                Generate Article
+                </Button>
+            </CardFooter>
+            </Card>
+            
+            { (isLoadingArticle || generatedArticle) && (
+            <Card className="shadow-lg rounded-xl overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                <CardHeader className="bg-card p-6 border-b flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <FileText className="text-accent w-7 h-7" />
+                        <div>
+                            <CardTitle className="text-xl text-foreground">Generated Article</CardTitle>
+                            <CardDescription className="text-xs">
+                                Review your AI-generated content.
+                            </CardDescription>
+                        </div>
+                    </div>
+                    {(selectedOutputFormat === 'markdown' || selectedOutputFormat === 'html') && generatedArticle && !isLoadingArticle && (
+                        <Button variant="outline" size="sm" onClick={() => setShowRawOutput(!showRawOutput)}>
+                            {showRawOutput ? <Eye className="mr-2 h-4 w-4" /> : <Code className="mr-2 h-4 w-4" />}
+                            {showRawOutput ? 'View Rendered' : 'View Raw'}
+                        </Button>
+                    )}
+                </CardHeader>
+                <CardContent className="p-6">
+                {isLoadingArticle && !generatedArticle && (
+                    <div className="flex flex-col items-center justify-center h-60 border border-dashed rounded-lg p-8 bg-muted/20">
+                        <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                        <p className="mt-4 text-lg text-muted-foreground">Crafting your content...</p>
+                        <p className="text-sm text-muted-foreground">This might take a few moments.</p>
+                    </div>
+                )}
+                {generatedArticle && ( 
+                    <div className="generated-content-output-area min-h-[200px]">
+                    {selectedOutputFormat === 'text' ? (
+                        <Textarea 
+                            value={generatedArticle}
+                            onChange={(e) => setGeneratedArticle(e.target.value)}
+                            rows={18}
+                            className="text-sm leading-relaxed font-sans border-input focus:border-primary bg-background p-3 rounded-md shadow-inner w-full h-auto min-h-[400px] sm:min-h-[500px]"
+                            placeholder="Your generated article will appear here."
+                            aria-label="Generated article content"
+                            readOnly={isLoadingArticle} 
+                        />
+                    ) : showRawOutput ? (
+                        <Textarea 
+                            value={generatedArticle}
+                            readOnly
+                            rows={18}
+                            className="text-sm leading-relaxed font-mono border-input focus:border-primary bg-muted/30 p-3 rounded-md shadow-inner w-full h-auto min-h-[400px] sm:min-h-[500px]"
+                            aria-label={`Raw ${selectedOutputFormat} content`}
+                        />
+                    ) : selectedOutputFormat === 'markdown' ? (
+                        <div className="prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}
+                                components={{
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    img: ({node, ...props}) => <img {...props} style={{maxWidth: '100%', height: 'auto', borderRadius: '0.5rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', margin: '1em 0'}} alt={props.alt || ""} />
+                                }}
+                            >{generatedArticle}</ReactMarkdown>
+                        </div>
+                    ) : selectedOutputFormat === 'html' ? (
+                        <div 
+                            className="p-4 border rounded-md bg-muted/20 shadow-inner overflow-auto h-[400px] sm:h-[500px] w-full prose prose-sm sm:prose-base lg:prose-lg xl:prose-xl dark:prose-invert max-w-none"
+                            dangerouslySetInnerHTML={{ __html: generatedArticle }} 
+                        />
+                    ) : null}
+                    </div>
+                )}
+                </CardContent>
+                {generatedArticle && !isLoadingArticle && (
+                    <CardFooter className="p-6 bg-muted/10 border-t">
+                        <div className="flex gap-2 w-full">
+                        <Button onClick={handleCopyArticle} variant="outline" className="flex-1">
+                            <Copy className="mr-2 h-4 w-4" /> {copyButtonText}
+                        </Button>
+                        <Button onClick={handleDownloadArticle} variant="outline" className="flex-1">
+                            <Download className="mr-2 h-4 w-4" /> Download Article
+                        </Button>
+                        </div>
+                    </CardFooter>
+                )}
+            </Card>
+            )}
+        </div>
       </main>
 
       <footer className="mt-16 mb-8 text-center text-muted-foreground text-sm">

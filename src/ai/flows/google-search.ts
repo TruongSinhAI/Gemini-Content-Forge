@@ -6,6 +6,7 @@
  * - GoogleSearchInput - The input type for the performGoogleSearch function.
  * - GoogleSearchOutput - The return type for the performGoogleSearch function.
  * - SearchResultItem - Represents a single search result item, now including fetchedContent.
+ * 
  */
 
 import {ai} from '@/ai/genkit';

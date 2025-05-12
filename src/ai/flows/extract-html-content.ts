@@ -5,6 +5,7 @@
  * - extractHtmlContent - A function that takes raw HTML and returns extracted text.
  * - ExtractHtmlInput - The input type for the extractHtmlContent function.
  * - ExtractHtmlOutput - The return type for the extractHtmlContent function.
+ * 
  */
 
 import {ai} from '@/ai/genkit';

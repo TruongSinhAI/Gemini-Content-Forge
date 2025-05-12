@@ -5,6 +5,7 @@
  * - generateArticle - A function for non-streaming article generation, potentially including AI-generated images.
  * - GenerateArticleInput - The input type for the generateArticle function.
  * - GenerateArticleOutput - The output type for non-streaming generation.
+ * 
  */
 
 import { ai } from '@/ai/genkit';

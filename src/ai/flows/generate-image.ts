@@ -6,6 +6,7 @@
  * - generateImage - A function for image generation.
  * - GenerateImageInput - The input type for the generateImage function.
  * - GenerateImageOutput - The output type for image generation.
+ * 
  */
 
 import { ai } from '@/ai/genkit';

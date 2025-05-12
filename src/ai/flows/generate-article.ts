@@ -11,7 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z}from 'genkit';
-import {MessageData} from 'genkit/generate';
+// Removed unused: import {MessageData} from 'genkit/generate';
 
 
 const GenerateArticleInputSchema = z.object({
@@ -25,11 +25,6 @@ const GenerateArticleInputSchema = z.object({
   outputFormat: z.enum(['text', 'markdown', 'html']).default('text').describe('The desired output format (e.g., "text", "markdown", "html"). Defaults to "text".')
 });
 export type GenerateArticleInput = z.infer<typeof GenerateArticleInputSchema>;
-
-// Output schema is not strictly needed for streaming text, but good for potential structured output in future non-streaming versions.
-// const GenerateArticleOutputSchema = z.object({
-//   articleChunk: z.string().describe('A chunk of the generated article content.'),
-// });
 
 
 export const generateArticleStreamFlow = ai.defineFlow(
@@ -62,11 +57,9 @@ Target Language: ${input.language || 'English'}. Make sure the entire output is 
     if (typeof fullPromptText !== 'string' || !fullPromptText.trim()) {
       const errorDetail = `Prompt text is invalid or empty. Type: ${typeof fullPromptText}, Value: '${String(fullPromptText).substring(0,100)}...'`;
       console.error(errorDetail + ". Cannot generate article.");
-      // This error will be caught by the ReadableStream wrapper in the exported function
       throw new Error(errorDetail); 
     }
 
-    // Pass the fullPromptText string directly to ai.generateStream
     const {stream, response} = ai.generateStream({
       prompt: fullPromptText, 
       model: 'googleai/gemini-2.0-flash', 
@@ -102,12 +95,11 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
             if (typeof chunk === 'string') {
               controller.enqueue(encoder.encode(chunk));
             } else if (chunk && typeof chunk === 'object' && 'text' in chunk && typeof chunk.text === 'string') {
-              // Handle cases where chunk might be an object with a text property (though flow outputSchema is z.string())
               controller.enqueue(encoder.encode(chunk.text));
             }
           }
           // Check if controller is still active before closing
-          if (controller.desiredSize !== null && controller.desiredSize > 0) {
+          if (controller.desiredSize !== null && controller.desiredSize > 0) { // Ensure controller is active
              controller.close();
           }
         } catch (error) {
@@ -117,7 +109,7 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
             errorMessage = error.message;
           }
           // Check if controller is still active
-          if (controller.desiredSize !== null && controller.desiredSize > 0) {
+          if (controller.desiredSize !== null && controller.desiredSize > 0) { // Ensure controller is active
             try {
               controller.enqueue(encoder.encode(`\n\n--- STREAMING ERROR ---\n${errorMessage}`));
               controller.error(new Error(errorMessage)); 
@@ -126,14 +118,12 @@ export async function generateArticleStream(input: GenerateArticleInput): Promis
             }
           }
         } finally {
-          // Ensure close is only called if controller is active and not already closed/errored
-           if (controller.desiredSize !== null && controller.desiredSize > 0) {
-            try {
-                // controller.close(); // controller.error() already closes it. Explicit close here can cause errors if already errored.
-            } catch (e) {
-                // console.warn("Controller was already closed when trying to close in finally block:", e);
-            }
-          }
+           // Ensure close is only called if controller is active and not already closed/errored
+           // controller.error() closes the stream, so an additional controller.close() can cause issues if an error occurred.
+           // If no error, and stream was not closed by iterating fully, it should be closed here.
+           // However, the loop `for await (const chunk of genkitStream)` should handle closing on completion or error.
+           // The previous explicit `controller.close()` here might have been problematic if `controller.error()` was already called.
+           // Let's rely on the natural completion or error handling to close.
         }
       }
     });

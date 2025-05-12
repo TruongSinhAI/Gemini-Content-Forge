@@ -7,15 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle } from "lucide-react";
+import { Loader2, Lightbulb, FileText, Settings2, Sparkles, Tags, BookText, Search, UploadCloud, FileUp, Link as LinkIcon, PlusCircle, AlertTriangle, ChevronsUpDown } from "lucide-react";
 import { generateArticle, type GenerateArticleInput } from '@/ai/flows/generate-article';
 import { suggestTopics, type SuggestTopicsInput } from '@/ai/flows/suggest-topics';
-import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem } from '@/ai/flows/google-search';
+import { performGoogleSearch, type GoogleSearchInput, type SearchResultItem as ApiSearchResultItem } from '@/ai/flows/google-search';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 type ContentType = 'blog post' | 'product description' | 'marketing content';
 const contentTypes: ContentType[] = ['blog post', 'product description', 'marketing content'];
+
+// Extend the imported SearchResultItem to include UI-specific state like isContentVisible
+interface SearchResultItem extends ApiSearchResultItem {
+  isContentVisible?: boolean;
+}
 
 export default function GeminiContentForgePage() {
   // Topic Suggestion State
@@ -47,9 +54,6 @@ export default function GeminiContentForgePage() {
 
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
-    // Check for API keys on mount to display warning if not set for Google Search
-    // Note: Actual check for process.env values for flows happens server-side.
-    // This is a client-side hint. The google-search.ts flow has the actual check.
     const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
     const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
 
@@ -94,13 +98,12 @@ export default function GeminiContentForgePage() {
     }
     setIsLoadingSearch(true);
     setSearchResults([]);
-    setSearchApiWarning(null); // Clear previous warnings
+    setSearchApiWarning(null); 
     try {
       const input: GoogleSearchInput = { query: searchQuery };
       const result = await performGoogleSearch(input);
-      setSearchResults(result.results || []);
+      setSearchResults((result.results || []).map(item => ({ ...item, isContentVisible: false })));
       if (result.results && result.results.length === 0 && searchQuery.trim() !== "") {
-         // Check if it's due to placeholder keys or actual no results
          const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
          const customSearchEngineId = process.env.NEXT_PUBLIC_CUSTOM_SEARCH_ENGINE_ID;
          if (!googleApiKey || googleApiKey === 'YOUR_GOOGLE_API_KEY_HERE' || 
@@ -123,11 +126,25 @@ export default function GeminiContentForgePage() {
     }
   };
 
-  const handleAddSnippetToDescription = (snippet: string, title: string) => {
-    const newContext = `\n\n--- Search Result ---\nTitle: ${title}\nSnippet: ${snippet}\n--- End Search Result ---`;
-    setDescription(prev => prev ? `${prev}${newContext}` : newContext.trim());
-    toast({ title: "Context Added", description: "Search result snippet added to Additional Context." });
+  const handleAddSnippetToDescription = (snippet: string, title: string, fullContent?: string) => {
+    let contentToAdd = `\n\n--- Search Result ---\nTitle: ${title}\nSnippet: ${snippet}`;
+    if (fullContent && fullContent.trim() && !fullContent.startsWith("[Failed") && !fullContent.startsWith("[Error") && !fullContent.startsWith("[No")) {
+      contentToAdd += `\nFull Extracted Content:\n${fullContent}`;
+    }
+    contentToAdd += `\n--- End Search Result ---`;
+
+    setDescription(prev => prev ? `${prev}${contentToAdd}` : contentToAdd.trim());
+    toast({ title: "Context Added", description: "Search result information added to Additional Context." });
   };
+
+  const toggleFetchedContentVisibility = (index: number) => {
+    setSearchResults(prevResults =>
+      prevResults.map((result, i) =>
+        i === index ? { ...result, isContentVisible: !result.isContentVisible } : result
+      )
+    );
+  };
+
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -163,7 +180,6 @@ export default function GeminiContentForgePage() {
         setUploadedFileContent(null);
       }
     }
-     // Reset file input value so the same file can be re-uploaded after clearing
     if (event.target) {
         event.target.value = '';
     }
@@ -261,7 +277,7 @@ export default function GeminiContentForgePage() {
               Real-time Web Search
             </CardTitle>
             <CardDescription>
-              Find up-to-date information from Google to enrich your content.
+              Find up-to-date information from Google to enrich your content. Fetched content is AI-extracted.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-6">
@@ -286,27 +302,43 @@ export default function GeminiContentForgePage() {
               </div>
             </div>
             {searchResults.length > 0 && (
-              <div className="mt-4 space-y-3 pt-4 border-t max-h-80 overflow-y-auto">
+              <div className="mt-4 space-y-3 pt-4 border-t max-h-[30rem] overflow-y-auto"> {/* Increased max-h */}
                 <h3 className="font-semibold text-foreground">Search Results:</h3>
-                {searchResults.map((result, index) => (
-                  <Card key={index} className="bg-muted/20 p-3 shadow-sm">
-                    <h4 className="font-medium text-primary mb-1">{result.title}</h4>
-                    <p className="text-sm text-muted-foreground mb-2 text-ellipsis overflow-hidden max-h-20">{result.snippet}</p>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1">
-                            <LinkIcon className="w-3 h-3" /> Visit Source
-                        </a>
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => handleAddSnippetToDescription(result.snippet, result.title)}
-                            className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1"
-                        >
-                            <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add to Context
-                        </Button>
-                    </div>
-                  </Card>
-                ))}
+                <Accordion type="multiple" className="w-full">
+                  {searchResults.map((result, index) => (
+                    <AccordionItem value={`item-${index}`} key={index} className="bg-muted/20 p-0 shadow-sm rounded-md mb-2 border">
+                       <AccordionTrigger className="p-3 hover:no-underline w-full text-left">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-primary mb-1 text-base">{result.title}</h4>
+                            <p className="text-sm text-muted-foreground mb-2 text-ellipsis overflow-hidden line-clamp-2">{result.snippet}</p>
+                            <a href={result.link} target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline flex items-center gap-1">
+                                <LinkIcon className="w-3 h-3" /> Visit Source
+                            </a>
+                          </div>
+                       </AccordionTrigger>
+                      <AccordionContent className="px-3 pb-3">
+                        <div className="border-t pt-3 mt-2">
+                          {result.fetchedContent && (
+                            <div className="mb-3">
+                              <h5 className="text-sm font-semibold text-foreground/80 mb-1">AI Extracted Content:</h5>
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto bg-background/50 p-2 rounded-md border">
+                                {result.fetchedContent}
+                              </p>
+                            </div>
+                          )}
+                          <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleAddSnippetToDescription(result.snippet, result.title, result.fetchedContent)}
+                              className="text-accent hover:text-accent-foreground hover:bg-accent/20 px-2 py-1 w-full justify-start"
+                          >
+                              <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add Snippet & Extracted Content to Context
+                          </Button>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </div>
             )}
           </CardContent>
